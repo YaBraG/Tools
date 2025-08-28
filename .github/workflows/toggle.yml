@@ -10,14 +10,14 @@ on:
         options: [ "on", "off" ]
 
 permissions:
-  actions: write
+  actions: write   # required to manage repo variables
   contents: read
 
 jobs:
   toggle:
     runs-on: ubuntu-latest
     steps:
-      - name: Set variable via API
+      - name: Set repo variable TCP_ON (update or create)
         id: setvar
         uses: actions/github-script@v7
         with:
@@ -26,14 +26,27 @@ jobs:
             const val = mode === 'on' ? '1' : '0';
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            await github.rest.actions.createOrUpdateRepoVariable({
-              owner,
-              repo,
-              name: 'TCP_ON',
-              value: val
-            });
+            const name = 'TCP_ON';
+
+            // Try to update first (PATCH). If it doesn't exist, create (PUT).
+            try {
+              await github.request('PATCH /repos/{owner}/{repo}/actions/variables/{name}', {
+                owner, repo, name, value: val
+              });
+            } catch (e) {
+              if (e.status === 404) {
+                await github.request('PUT /repos/{owner}/{repo}/actions/variables/{name}', {
+                  owner, repo, name, value: val
+                });
+              } else {
+                throw e;
+              }
+            }
+
             core.setOutput('val', val);
+
       - name: Discord notify
+        if: always()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           VAL: ${{ steps.setvar.outputs.val }}
@@ -43,5 +56,8 @@ jobs:
             exit 0
           fi
           TS=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          CONTENT="**TCP Toggle**\nTCP_ON set to: $VAL\n$TS"
-          curl -s -H "Content-Type: application/json" -X POST -d "$(jq -n --arg content "$CONTENT" '{content: $content}')" "$DISCORD_WEBHOOK" >/dev/null 2>&1 || true
+          MSG="**TCP Toggle**%0ATCP_ON set to: $VAL%0A$TS"
+          curl -s -H "Content-Type: application/json" \
+               -X POST \
+               -d "{\"content\":\"$MSG\"}" \
+               "$DISCORD_WEBHOOK" >/dev/null 2>&1 || true
