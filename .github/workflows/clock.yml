@@ -1,4 +1,5 @@
-name: TCP Auto Clock
+# version: v1.2 (no heredocs; uses jq for Discord payload)
+name: TCP Auto Clock (minimal)
 
 on:
   schedule:
@@ -27,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install playwright pyyaml
+          pip install playwright pyyaml jq
           python -m playwright install chromium
 
       - name: Run auto_clock.py
@@ -65,10 +66,6 @@ jobs:
             exit 0
           fi
           NOW_UTC="$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-          PAYLOAD=$(python - <<'PY'
-import json, os
-content = f"**TCP Auto Clock**\n{os.environ['STATUS']}\n{os.environ['NOW_UTC']}"
-print(json.dumps({"content": content}))
-PY
-)
+          CONTENT="**TCP Auto Clock**\n$STATUS\n$NOW_UTC"
+          PAYLOAD="$(jq -n --arg content "$CONTENT" '{content: $content}')"
           curl -s -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK" >/dev/null 2>&1 || true
