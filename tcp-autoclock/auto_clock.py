@@ -141,55 +141,78 @@ def read_on_flag() -> Optional[str]:
 # ================
 # Web automation (Playwright)
 # ================
+def _click_if_visible(page, text: str, timeout_ms=1200) -> bool:
+    """
+    Clicks a button if it's visible and returns True; otherwise returns False.
+    We try both role-based and text-based fallbacks.
+    """
+    try:
+        page.get_by_role("button", name=text, exact=False).click(timeout=timeout_ms)
+        return True
+    except Exception:
+        try:
+            page.locator(f"button:has-text('{text}')").first.click(timeout=timeout_ms)
+            return True
+        except Exception:
+            return False
+
+
 def perform_clock(action: str, cfg: Config) -> None:
     """
-    Actually perform the Clock In/Out sequence using Playwright.
-    Args:
-        action: "in" or "out"
+    Performs the Clock In/Out sequence, now tolerant of extra confirmation
+    screens that require multiple 'Continue' and/or 'OK' presses.
     """
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  # headless in CI
+        browser = p.chromium.launch(headless=True)
         ctx = browser.new_context()
         page = ctx.new_page()
-        page.set_default_timeout(15000)  # 15s per step
+        page.set_default_timeout(15000)
 
         try:
-            # 1) Open webclock
+            # 1) Open WebClock
             page.goto(cfg.url, wait_until="domcontentloaded")
 
-            # 2) Fill External ID (with robust fallbacks)
+            # 2) Fill External ID
             try:
                 page.get_by_label("External ID").fill(cfg.username)
-            except PWTimeout:
+            except Exception:
                 page.locator(
                     "input[placeholder*='External ID'], input[aria-label*='External ID']"
                 ).first.fill(cfg.username)
 
             # 3) Click Clock In/Out
-            btn = "Clock In" if action == "in" else "Clock Out"
-            page.get_by_role("button", name=btn).click()
+            target_btn = "Clock In" if action == "in" else "Clock Out"
+            page.get_by_role("button", name=target_btn).click()
 
-            # 4) Password modal and Log On
+            # 4) Password modal → Log On
             try:
                 page.get_by_label("Password").fill(cfg.password)
-            except PWTimeout:
-                page.locator("input[type='password']").fill(cfg.password)
+            except Exception:
+                page.locator("input[type='password']").first.fill(cfg.password)
 
-            try:
-                page.get_by_role("button", name="Log On").click()
-            except PWTimeout:
-                try:
-                    page.get_by_role("button", name="Log On To Dashboard").click()
-                except PWTimeout:
-                    # Last resort: Enter key
-                    page.keyboard.press("Enter")
+            # Primary button name varies; try both
+            if not _click_if_visible(page, "Log On", timeout_ms=2000):
+                _click_if_visible(page, "Log On To Dashboard", timeout_ms=2000) or page.keyboard.press("Enter")
 
-            # 5) Confirmation screen → Continue
-            page.get_by_role("button", name="Continue").click()
-            page.wait_for_timeout(1000)
+            # 5) Handle confirmation pages
+            # Some tenants show multiple confirmation steps (Continue → Continue → OK).
+            # We loop a few times and click anything that looks like a finalizer.
+            for _ in range(6):  # up to 6 presses just to be safe
+                clicked = False
+                # Common TCP labels seen in the wild
+                for label in ("Continue", "OK", "Ok", "Okay", "Confirm", "Yes"):
+                    clicked |= _click_if_visible(page, label, timeout_ms=1200)
+                if not clicked:
+                    break
+                page.wait_for_timeout(400)  # brief pause between dialogs
+
+            # Optional: small settle wait
+            page.wait_for_timeout(800)
+
         finally:
             ctx.close()
             browser.close()
+
 
 
 # ================
