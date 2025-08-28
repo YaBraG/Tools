@@ -17,7 +17,7 @@ week:
   thursday:
     sessions:
       - { in: "10:30", out: "12:00" }
-      - { in: "12:30", out: "18:00" }
+      - { in: "13:00", out: "18:00" }
   friday:    { sessions: [] }
   saturday:  { sessions: [] }
   sunday:    { sessions: [] }
