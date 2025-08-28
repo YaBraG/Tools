@@ -1,0 +1,89 @@
+name: TCP Auto Clock
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes (UTC)
+  workflow_dispatch:
+    inputs:
+      skip_today:
+        description: "Append today to skip_dates.txt? (yes/no)"
+        required: false
+        default: "no"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tcp-autoclock
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright pyyaml jq
+          python -m playwright install chromium
+
+      - name: Optional: Skip Today
+        if: ${{ github.event.inputs.skip_today == 'yes' }}
+        run: |
+          python - <<'PY'
+          from datetime import datetime
+          from pathlib import Path
+          p = Path("skip_dates.txt")
+          today = datetime.now().strftime("%Y-%m-%d")
+          lines = [ln for ln in (p.read_text() if p.exists() else "").splitlines() if ln.strip() and not ln.startswith("#")]
+          if today not in lines:
+              lines.append(today)
+          p.write_text("\n".join(lines) + "\n")
+          print("Appended", today, "to skip_dates.txt")
+          PY
+
+      - name: Run auto clock
+        id: runbot
+        env:
+          TCP_URL: ${{ secrets.TCP_URL }}
+          TCP_USERNAME: ${{ secrets.TCP_USERNAME }}
+          TCP_PASSWORD: ${{ secrets.TCP_PASSWORD }}
+          TCP_ON: ${{ vars.TCP_ON }}
+        run: |
+          set -e
+          python auto_clock.py || true
+          echo "status=$(cat run_status.txt | sed 's/\r//g')" >> $GITHUB_OUTPUT
+
+      - name: Commit state changes
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "Update state/skip (CI)"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+
+      - name: Discord Notification
+        if: always()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          STATUS: ${{ steps.runbot.outputs.status }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "No DISCORD_WEBHOOK secret set; skipping Discord notification."
+            exit 0
+          fi
+          NOW_UTC=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          PAYLOAD=$(jq -n --arg content "**TCP Auto Clock**\n$STATUS\n$NOW_UTC" '{content: $content}')
+          curl -s -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK" >/dev/null 2>&1 || true

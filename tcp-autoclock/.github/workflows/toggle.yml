@@ -1,0 +1,47 @@
+name: Toggle TCP_ON
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Turn scheduling ON or OFF"
+        required: true
+        type: choice
+        options: [ "on", "off" ]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  toggle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set variable via API
+        id: setvar
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const mode = core.getInput('mode');
+            const val = mode === 'on' ? '1' : '0';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            await github.rest.actions.createOrUpdateRepoVariable({
+              owner,
+              repo,
+              name: 'TCP_ON',
+              value: val
+            });
+            core.setOutput('val', val);
+      - name: Discord notify
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          VAL: ${{ steps.setvar.outputs.val }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "No DISCORD_WEBHOOK; skipping Discord notification."
+            exit 0
+          fi
+          TS=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          CONTENT="**TCP Toggle**\nTCP_ON set to: $VAL\n$TS"
+          curl -s -H "Content-Type: application/json" -X POST -d "$(jq -n --arg content "$CONTENT" '{content: $content}')" "$DISCORD_WEBHOOK" >/dev/null 2>&1 || true

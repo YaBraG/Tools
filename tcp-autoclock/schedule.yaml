@@ -1,0 +1,23 @@
+timezone: "America/New_York"
+window_minutes: 7
+
+week:
+  monday:
+    sessions:
+      - { in: "10:30", out: "12:00" }
+      - { in: "12:30", out: "17:15" }
+  tuesday:
+    sessions:
+      - { in: "10:30", out: "12:00" }
+      - { in: "12:30", out: "17:15" }
+  wednesday:
+    sessions:
+      - { in: "10:30", out: "12:00" }
+      - { in: "12:30", out: "17:15" }
+  thursday:
+    sessions:
+      - { in: "10:30", out: "12:00" }
+      - { in: "12:30", out: "18:00" }
+  friday:    { sessions: [] }
+  saturday:  { sessions: [] }
+  sunday:    { sessions: [] }
