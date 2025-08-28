@@ -1,3 +1,4 @@
+# version: v1.1 (file-based toggle + clean Discord newlines)
 name: 🔘 Master Toggle
 
 on:
@@ -34,6 +35,8 @@ jobs:
             git add ON.flag
             git commit -m "Set ON.flag to $(cat ON.flag)"
             git push
+          else
+            echo "No change to ON.flag."
           fi
 
       - name: Discord notify
