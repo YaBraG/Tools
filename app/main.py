@@ -36,13 +36,14 @@ def run(argv: list[str] | None = None) -> int:
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
 
+    from app.metadata import APP_NAME
     from app.ui.main_window import MainWindow
     from app.ui.styles import APP_STYLESHEET
 
     args, qt_args = _parse_args(list(sys.argv[1:] if argv is None else argv))
     application = QApplication([sys.argv[0], *qt_args])
-    application.setApplicationName("Tools")
-    application.setOrganizationName("Tools")
+    application.setApplicationName(APP_NAME)
+    application.setOrganizationName(APP_NAME)
     application.setStyleSheet(APP_STYLESHEET)
 
     window = MainWindow()
@@ -56,4 +57,3 @@ def run(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(run())
-

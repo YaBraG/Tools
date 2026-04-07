@@ -4,6 +4,8 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
 from app.core.tool_registry import ToolManifest
+from app.metadata import APP_VERSION, GITHUB_RELEASES_URL
+from app.ui.update_panel import UpdatePanel
 from app.ui.widgets.tool_catalog import ToolCatalogWidget
 
 
@@ -78,14 +80,16 @@ class SettingsPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
 
         panel = _InfoPanel(
             "Settings",
-            "This first scaffold keeps settings intentionally light. Future "
-            "versions can add app preferences, default paths, and packaging "
-            "configuration here without changing the tool plugin system.",
+            "Settings stay intentionally light in this scaffold. Update checks "
+            "are handled through GitHub Releases and installable Windows "
+            "installer assets.",
         )
         layout.addWidget(panel)
+        layout.addWidget(UpdatePanel())
         layout.addStretch(1)
 
 
@@ -104,7 +108,7 @@ class AboutPage(QWidget):
         summary = (
             "Tools is a Windows-only desktop launcher and utility workbench "
             "built with Python 3.12, PySide6, and a simple manifest-driven "
-            "tool system."
+            f"tool system.\n\nVersion: {APP_VERSION}\nReleases: {GITHUB_RELEASES_URL}"
         )
         layout.addWidget(_InfoPanel("About Tools", summary))
 
@@ -136,4 +140,3 @@ class _InfoPanel(QFrame):
 
         layout.addWidget(title_label)
         layout.addWidget(body_label)
-

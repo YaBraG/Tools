@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tools-desktop"
-version = "0.1.0"
 description = "A Windows-only Python and PySide6 desktop launcher for local utilities."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
 authors = [{ name = "YaBraG" }]
 keywords = ["desktop", "pyside6", "launcher", "windows", "tools"]
+dynamic = ["version"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Environment :: Win32 (MS Windows)",
@@ -23,24 +23,20 @@ dependencies = [
     "PySide6>=6.7,<7",
 ]
 
+[project.urls]
+Repository = "https://github.com/YaBraG/Tools"
+Releases = "https://github.com/YaBraG/Tools/releases"
+
 [project.optional-dependencies]
 packaging = [
     "pyinstaller>=6.6,<7",
 ]
 
-[tool.setuptools]
-packages = [
-    "app",
-    "app.core",
-    "app.ui",
-    "app.ui.widgets",
-    "shared",
-    "tools",
-    "tools.file_renamer",
-    "tools.image_converter",
-]
+[tool.setuptools.dynamic]
+version = { attr = "app.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["app*", "shared*", "tools*"]
 
 [tool.setuptools.package-data]
-"tools.file_renamer" = ["manifest.json"]
-"tools.image_converter" = ["manifest.json"]
-
+"tools" = ["*/manifest.json"]

@@ -21,7 +21,8 @@ QLabel#sidebarTitle {
 }
 
 QLabel#sidebarSubtitle,
-QLabel#sidebarVersion {
+QLabel#sidebarVersion,
+QLabel#mutedLabel {
     color: #64748B;
     font-size: 12px;
 }
@@ -177,4 +178,3 @@ QPushButton#secondaryButton:hover {
     background: #334155;
 }
 """
-

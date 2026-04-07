@@ -5,14 +5,18 @@ utilities. It is built as a clean Python + PySide6 application with a
 manifest-driven plugin system so new tools can be added without changing the
 main window.
 
-This repository currently contains the first MVP scaffold: a dark desktop UI,
-sidebar navigation, searchable tool cards, and two placeholder tools.
+This repository currently contains a distribution-ready MVP scaffold: a dark
+desktop UI, sidebar navigation, searchable tool cards, two placeholder tools,
+PyInstaller packaging, Inno Setup installer preparation, and a simple
+GitHub Releases update checker.
 
 ## Stack
 
 - Python 3.12
 - PySide6 for the desktop UI
-- PyInstaller for future Windows packaging
+- PyInstaller for Windows app packaging
+- Inno Setup for the Windows installer
+- GitHub Releases for release downloads and update checks
 - Manifest-based tool discovery under `tools/`
 
 ## Run Locally
@@ -26,14 +30,81 @@ python -m pip install -r requirements.txt
 python app/main.py
 ```
 
+## Build
+
+Install Inno Setup 6 if you want the installer step:
+
+```powershell
+winget install --id JRSoftware.InnoSetup -e -s winget -i
+```
+
+Then build from the repository root:
+
+```powershell
+.\scripts\build.ps1
+```
+
+Outputs:
+
+```text
+dist\Tools\Tools.exe
+dist\installer\Tools-Setup-v0.1.0.exe
+```
+
+If Inno Setup is not installed, the script still builds the PyInstaller app
+bundle and prints a warning for the installer step.
+
+To skip the installer intentionally:
+
+```powershell
+.\scripts\build.ps1 -SkipInstaller
+```
+
+See `docs/build.md` for details.
+
+## Release Flow
+
+Tools uses GitHub Releases for distribution:
+
+```powershell
+.\scripts\build.ps1
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Create a GitHub Release for the tag and upload:
+
+```text
+dist\installer\Tools-Setup-v0.1.0.exe
+```
+
+See `docs/release.md` for the full checklist.
+
+## Updates
+
+End users can open Settings and click **Check for updates**. The app checks:
+
+```text
+https://api.github.com/repos/YaBraG/Tools/releases/latest
+```
+
+If a newer version exists, the app shows the current version, latest version,
+and a **Download update** button. The user downloads the installer, closes
+Tools, and runs the installer to update. The app does not patch itself in
+place and does not silently install updates.
+
+See `docs/update-system.md` for implementation details.
+
 ## Project Structure
 
 ```text
-app/      PySide6 application entry point, UI, and core registry logic
-tools/    Manifest-backed tool plugins
-shared/   Shared contracts for tools
-docs/     Project documentation
-assets/   Static assets placeholder for future icons and images
+app/        PySide6 application entry point, UI, update flow, and core registry logic
+tools/      Manifest-backed tool plugins
+shared/     Shared contracts for tools
+docs/       Project documentation
+assets/     Static assets placeholder for future icons and images
+packaging/  PyInstaller and Inno Setup packaging files
+scripts/    Windows build scripts
 ```
 
 ## Adding a New Tool

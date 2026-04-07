@@ -1,4 +1,5 @@
 """Desktop launcher package for Tools."""
 
-__version__ = "0.1.0"
+from app.metadata import APP_VERSION
 
+__version__ = APP_VERSION
