@@ -1,0 +1,10 @@
+{
+  "id": "image_converter",
+  "name": "Image Converter",
+  "description": "Convert image files between common formats.",
+  "entry_point": "tools.image_converter.tool:ImageConverterTool",
+  "version": "0.1.0",
+  "category": "Images",
+  "tags": ["images", "convert", "format"]
+}
+

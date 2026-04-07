@@ -32,6 +32,11 @@ MANIFEST
 *.manifest
 *.spec
 
+# Tools app local state
+.tools-data/
+*.sqlite
+*.sqlite3
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt

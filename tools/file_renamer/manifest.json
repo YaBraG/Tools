@@ -1,0 +1,10 @@
+{
+  "id": "file_renamer",
+  "name": "File Renamer",
+  "description": "Prepare bulk rename workflows for local files.",
+  "entry_point": "tools.file_renamer.tool:FileRenamerTool",
+  "version": "0.1.0",
+  "category": "Files",
+  "tags": ["rename", "batch", "files"]
+}
+
