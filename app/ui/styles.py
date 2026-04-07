@@ -104,6 +104,26 @@ QLineEdit#toolSearch:focus {
     border-color: #3B82F6;
 }
 
+QComboBox#formatCombo {
+    background: #0F172A;
+    border: 1px solid #253044;
+    border-radius: 12px;
+    color: #F8FAFC;
+    font-size: 13px;
+    padding: 9px 12px;
+    min-width: 120px;
+}
+
+QComboBox#formatCombo:hover,
+QComboBox#formatCombo:focus {
+    border-color: #3B82F6;
+}
+
+QComboBox#formatCombo::drop-down {
+    border: none;
+    width: 26px;
+}
+
 QScrollArea#toolScroll {
     background: transparent;
     border: none;
@@ -148,6 +168,38 @@ QLabel#emptyState {
     color: #94A3B8;
     font-size: 14px;
     padding: 24px;
+}
+
+QFrame#audioDropZone {
+    background: #0F172A;
+    border: 1px dashed #3B82F6;
+    border-radius: 18px;
+}
+
+QLabel#dropZoneTitle {
+    color: #F8FAFC;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+QLabel#dropZoneSubtitle {
+    color: #94A3B8;
+    font-size: 13px;
+}
+
+QLabel#statusLabel {
+    color: #93C5FD;
+    font-size: 13px;
+}
+
+QLabel#successLabel {
+    color: #86EFAC;
+    font-size: 13px;
+}
+
+QLabel#errorLabel {
+    color: #FCA5A5;
+    font-size: 13px;
 }
 
 QPushButton#primaryButton {

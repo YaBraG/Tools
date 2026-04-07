@@ -6,23 +6,29 @@ Tools uses GitHub Releases as the distribution and update source.
 
 1. Update `APP_VERSION` in `app/metadata.py`.
 2. Confirm `pyproject.toml` still reads the version dynamically from the app.
-3. Build the app and installer:
+3. Confirm FFmpeg distribution choice for the Audio Converter:
+
+- rely on user-installed FFmpeg through `PATH`
+- document `TOOLS_FFMPEG_PATH`
+- bundle a redistributable `ffmpeg.exe` under `assets\ffmpeg\` before building
+
+4. Build the app and installer:
 
 ```powershell
 .\scripts\build.ps1
 ```
 
-4. Smoke test `dist\Tools\Tools.exe`.
-5. Create and push a matching Git tag:
+5. Smoke test `dist\Tools\Tools.exe`.
+6. Create and push a matching Git tag:
 
 ```powershell
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-6. Create a GitHub Release for that tag.
-7. Upload the installer from `dist\installer\Tools-Setup-v0.1.0.exe`.
-8. Publish the release.
+7. Create a GitHub Release for that tag.
+8. Upload the installer from `dist\installer\Tools-Setup-v0.1.0.exe`.
+9. Publish the release.
 
 ## Asset Naming
 

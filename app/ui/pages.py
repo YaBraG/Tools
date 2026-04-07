@@ -49,7 +49,7 @@ class HomePage(QWidget):
         catalog = ToolCatalogWidget(
             tools,
             title="Launch a Tool",
-            subtitle="Filter the available tools and open a placeholder workbench.",
+            subtitle="Filter the available tools and open the selected workbench.",
         )
         catalog.tool_requested.connect(self.tool_requested.emit)
         layout.addWidget(catalog, 1)

@@ -6,9 +6,9 @@ manifest-driven plugin system so new tools can be added without changing the
 main window.
 
 This repository currently contains a distribution-ready MVP scaffold: a dark
-desktop UI, sidebar navigation, searchable tool cards, two placeholder tools,
-PyInstaller packaging, Inno Setup installer preparation, and a simple
-GitHub Releases update checker.
+desktop UI, sidebar navigation, searchable tool cards, a real Audio Converter
+tool, one File Renamer placeholder, PyInstaller packaging, Inno Setup installer
+preparation, and a simple GitHub Releases update checker.
 
 ## Stack
 
@@ -17,6 +17,7 @@ GitHub Releases update checker.
 - PyInstaller for Windows app packaging
 - Inno Setup for the Windows installer
 - GitHub Releases for release downloads and update checks
+- FFmpeg for the Audio Converter backend
 - Manifest-based tool discovery under `tools/`
 
 ## Run Locally
@@ -95,14 +96,35 @@ place and does not silently install updates.
 
 See `docs/update-system.md` for implementation details.
 
+## Audio Converter
+
+Audio Converter can convert one input audio file to `mp3`, `wav`, or `flac`.
+It uses FFmpeg and shows clear validation messages for missing input files,
+missing output folders, missing FFmpeg, existing output files, and failed
+conversions.
+
+FFmpeg is detected in this order:
+
+```text
+TOOLS_FFMPEG_PATH
+app folder\ffmpeg.exe
+app folder\ffmpeg\ffmpeg.exe
+app folder\ffmpeg\bin\ffmpeg.exe
+assets\ffmpeg\ffmpeg.exe
+assets\ffmpeg\bin\ffmpeg.exe
+ffmpeg on PATH
+```
+
+See `docs/audio-converter.md` for testing and packaging notes.
+
 ## Project Structure
 
 ```text
 app/        PySide6 application entry point, UI, update flow, and core registry logic
-tools/      Manifest-backed tool plugins
+tools/      Manifest-backed tool plugins, including Audio Converter
 shared/     Shared contracts for tools
 docs/       Project documentation
-assets/     Static assets placeholder for future icons and images
+assets/     Static assets placeholder for future icons, images, and optional FFmpeg files
 packaging/  PyInstaller and Inno Setup packaging files
 scripts/    Windows build scripts
 ```

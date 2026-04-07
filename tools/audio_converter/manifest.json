@@ -1,0 +1,10 @@
+{
+  "id": "audio_converter",
+  "name": "Audio Converter",
+  "description": "Convert one audio file to MP3, WAV, or FLAC using FFmpeg.",
+  "entry_point": "tools.audio_converter.tool:AudioConverterTool",
+  "version": "0.1.0",
+  "category": "Audio",
+  "tags": ["audio", "convert", "ffmpeg"]
+}
+
