@@ -36,6 +36,19 @@ datas = [
 
 if ASSETS_DIR.exists():
     datas.append((str(ASSETS_DIR), "assets"))
+else:
+    raise FileNotFoundError(f"Assets directory was not found: {ASSETS_DIR}")
+
+for required_ffmpeg_file in (
+    ASSETS_DIR / "ffmpeg" / "bin" / "ffmpeg.exe",
+    ASSETS_DIR / "ffmpeg" / "bin" / "ffprobe.exe",
+    ASSETS_DIR / "ffmpeg" / "LICENSE",
+    ASSETS_DIR / "ffmpeg" / "THIRD_PARTY_NOTICES.md",
+):
+    if not required_ffmpeg_file.exists():
+        raise FileNotFoundError(
+            f"Required bundled FFmpeg file was not found: {required_ffmpeg_file}"
+        )
 
 if LICENSE_FILE.exists():
     datas.append((str(LICENSE_FILE), "."))

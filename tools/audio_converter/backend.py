@@ -19,6 +19,13 @@ class FFmpegNotFoundError(AudioConversionError):
 
 
 @dataclass(frozen=True)
+class FFmpegInstallation:
+    ffmpeg_path: Path
+    ffprobe_path: Path | None
+    source: str
+
+
+@dataclass(frozen=True)
 class ConversionOptions:
     input_file: Path
     output_folder: Path
@@ -41,27 +48,77 @@ class FFmpegLocator:
     def __init__(self, context: ToolContext) -> None:
         self.context = context
 
-    def find(self) -> Path | None:
-        for candidate in self._candidate_paths():
-            if candidate and candidate.exists() and candidate.is_file():
-                return candidate
+    def find(self) -> FFmpegInstallation | None:
+        for bundled_folder in self._bundled_folders():
+            installation = self._from_folder(bundled_folder, "bundled")
+            if installation is not None:
+                return installation
+
+        env_path = os.environ.get("TOOLS_FFMPEG_PATH")
+        if env_path:
+            installation = self._from_path(Path(env_path), "TOOLS_FFMPEG_PATH")
+            if installation is not None:
+                return installation
 
         path_match = shutil.which("ffmpeg")
-        return Path(path_match) if path_match else None
+        if path_match:
+            ffmpeg_path = Path(path_match)
+            return FFmpegInstallation(
+                ffmpeg_path=ffmpeg_path,
+                ffprobe_path=self._sibling_ffprobe(ffmpeg_path)
+                or self._which_ffprobe(),
+                source="PATH",
+            )
 
-    def _candidate_paths(self) -> list[Path | None]:
-        env_path = os.environ.get("TOOLS_FFMPEG_PATH")
-        app_root = self.context.root_dir
+        return None
+
+    def _bundled_folders(self) -> list[Path]:
         assets_dir = self.context.assets_dir
 
         return [
-            Path(env_path) if env_path else None,
-            app_root / "ffmpeg.exe",
-            app_root / "ffmpeg" / "ffmpeg.exe",
-            app_root / "ffmpeg" / "bin" / "ffmpeg.exe",
-            assets_dir / "ffmpeg" / "ffmpeg.exe",
-            assets_dir / "ffmpeg" / "bin" / "ffmpeg.exe",
+            assets_dir / "ffmpeg" / "bin",
+            assets_dir / "ffmpeg",
         ]
+
+    def _from_path(self, path: Path, source: str) -> FFmpegInstallation | None:
+        if path.is_dir():
+            return self._from_folder(path, source) or self._from_folder(
+                path / "bin",
+                source,
+            )
+
+        if path.exists() and path.is_file():
+            return FFmpegInstallation(
+                ffmpeg_path=path,
+                ffprobe_path=self._sibling_ffprobe(path),
+                source=source,
+            )
+
+        return None
+
+    def _from_folder(self, folder: Path, source: str) -> FFmpegInstallation | None:
+        ffmpeg_path = folder / "ffmpeg.exe"
+        if not ffmpeg_path.exists() or not ffmpeg_path.is_file():
+            return None
+
+        return FFmpegInstallation(
+            ffmpeg_path=ffmpeg_path,
+            ffprobe_path=self._sibling_ffprobe(ffmpeg_path),
+            source=source,
+        )
+
+    @staticmethod
+    def _sibling_ffprobe(ffmpeg_path: Path) -> Path | None:
+        ffprobe_path = ffmpeg_path.parent / "ffprobe.exe"
+        if ffprobe_path.exists() and ffprobe_path.is_file():
+            return ffprobe_path
+
+        return None
+
+    @staticmethod
+    def _which_ffprobe() -> Path | None:
+        path_match = shutil.which("ffprobe")
+        return Path(path_match) if path_match else None
 
 
 class AudioConversionService:
@@ -69,7 +126,7 @@ class AudioConversionService:
         self.context = context
         self.ffmpeg_locator = FFmpegLocator(context)
 
-    def detect_ffmpeg(self) -> Path | None:
+    def detect_ffmpeg(self) -> FFmpegInstallation | None:
         return self.ffmpeg_locator.find()
 
     def build_command(self, options: ConversionOptions) -> ConversionCommand:
@@ -90,11 +147,11 @@ class AudioConversionService:
         if output_file.exists():
             raise AudioConversionError(f"Output file already exists: {output_file}")
 
-        ffmpeg_path = self.detect_ffmpeg()
-        if ffmpeg_path is None:
+        ffmpeg_installation = self.detect_ffmpeg()
+        if ffmpeg_installation is None:
             raise FFmpegNotFoundError(
-                "FFmpeg was not found. Install FFmpeg and add it to PATH, set "
-                "TOOLS_FFMPEG_PATH, or place ffmpeg.exe next to Tools.exe."
+                "FFmpeg was not found. Reinstall Tools to restore the bundled "
+                "FFmpeg files, set TOOLS_FFMPEG_PATH, or add FFmpeg to PATH."
             )
 
         arguments = [
@@ -108,7 +165,7 @@ class AudioConversionService:
         ]
 
         return ConversionCommand(
-            ffmpeg_path=ffmpeg_path,
+            ffmpeg_path=ffmpeg_installation.ffmpeg_path,
             arguments=arguments,
             output_file=output_file,
         )

@@ -6,11 +6,13 @@ Tools uses GitHub Releases as the distribution and update source.
 
 1. Update `APP_VERSION` in `app/metadata.py`.
 2. Confirm `pyproject.toml` still reads the version dynamically from the app.
-3. Confirm FFmpeg distribution choice for the Audio Converter:
+3. Confirm bundled FFmpeg files and notices are present:
 
-- rely on user-installed FFmpeg through `PATH`
-- document `TOOLS_FFMPEG_PATH`
-- bundle a redistributable `ffmpeg.exe` under `assets\ffmpeg\` before building
+- `assets\ffmpeg\bin\ffmpeg.exe`
+- `assets\ffmpeg\bin\ffprobe.exe`
+- `assets\ffmpeg\README.txt`
+- `assets\ffmpeg\LICENSE`
+- `assets\ffmpeg\THIRD_PARTY_NOTICES.md`
 
 4. Build the app and installer:
 

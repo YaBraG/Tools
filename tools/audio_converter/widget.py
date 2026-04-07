@@ -293,15 +293,27 @@ class AudioConverterWidget(QWidget):
         self.preview_label.setText(f"Output preview: {output_file}")
 
     def _update_ffmpeg_status(self) -> None:
-        ffmpeg_path = self.service.detect_ffmpeg()
-        if ffmpeg_path is None:
+        installation = self.service.detect_ffmpeg()
+        if installation is None:
             self.ffmpeg_label.setText(
-                "FFmpeg: not found. Install FFmpeg, add it to PATH, set "
-                "TOOLS_FFMPEG_PATH, or place ffmpeg.exe next to Tools.exe."
+                "FFmpeg: not found. Reinstall Tools to restore bundled FFmpeg, "
+                "set TOOLS_FFMPEG_PATH, or add FFmpeg to PATH."
             )
             return
 
-        self.ffmpeg_label.setText(f"FFmpeg: {ffmpeg_path}")
+        source_label = {
+            "bundled": "using bundled FFmpeg",
+            "TOOLS_FFMPEG_PATH": "using TOOLS_FFMPEG_PATH",
+            "PATH": "using system PATH",
+        }.get(installation.source, f"using {installation.source}")
+        probe_note = (
+            f" | ffprobe: {installation.ffprobe_path}"
+            if installation.ffprobe_path is not None
+            else " | ffprobe not found"
+        )
+        self.ffmpeg_label.setText(
+            f"FFmpeg: {source_label} ({installation.ffmpeg_path}){probe_note}"
+        )
 
     def _set_status(self, message: str, kind: str = "info") -> None:
         object_name = {

@@ -1,7 +1,7 @@
 # Audio Converter
 
 Audio Converter is the first real tool in the Tools workbench. It converts one
-input audio file to `mp3`, `wav`, or `flac` using FFmpeg.
+input audio file to `mp3`, `wav`, or `flac` using the bundled FFmpeg runtime.
 
 ## What It Does
 
@@ -26,22 +26,48 @@ choose a different folder or format. It does not overwrite files.
 
 The tool checks for FFmpeg in this order:
 
-1. `TOOLS_FFMPEG_PATH`
-2. `ffmpeg.exe` next to the app
-3. `ffmpeg\ffmpeg.exe` next to the app
-4. `ffmpeg\bin\ffmpeg.exe` next to the app
-5. `assets\ffmpeg\ffmpeg.exe`
-6. `assets\ffmpeg\bin\ffmpeg.exe`
-7. `ffmpeg` on `PATH`
+1. Bundled FFmpeg under `assets\ffmpeg\bin`
+2. Bundled FFmpeg under `assets\ffmpeg`
+3. `TOOLS_FFMPEG_PATH`, pointing to `ffmpeg.exe` or a folder containing it
+4. `ffmpeg` on system `PATH`
 
-For local development, the app root is the repository root. In packaged builds,
-the app root is the folder containing `Tools.exe`.
+For local development, bundled FFmpeg lives at `assets\ffmpeg\bin`. In
+packaged builds, PyInstaller places it under `_internal\assets\ffmpeg\bin`,
+and the app resolves that path automatically.
 
 If FFmpeg is missing, the tool shows a clear message and does not crash.
 
+The status text identifies the active source as bundled FFmpeg,
+`TOOLS_FFMPEG_PATH`, or system `PATH`.
+
+## Bundled Files
+
+The bundled runtime files live here:
+
+```text
+assets/
+  ffmpeg/
+    LICENSE
+    README.txt
+    THIRD_PARTY_NOTICES.md
+    bin/
+      ffmpeg.exe
+      ffprobe.exe
+```
+
+The included build is `8.1-essentials_build-www.gyan.dev`, licensed as GPL v3.
+The upstream FFmpeg project and Windows build source links are documented in
+`assets\ffmpeg\THIRD_PARTY_NOTICES.md`.
+
 ## Test Locally
 
-Install FFmpeg or point Tools to a local FFmpeg executable:
+The normal local run uses the bundled FFmpeg automatically:
+
+```powershell
+python app/main.py
+```
+
+To override the bundled copy for debugging:
 
 ```powershell
 $env:TOOLS_FFMPEG_PATH = "C:\path\to\ffmpeg.exe"
@@ -51,7 +77,8 @@ python app/main.py
 Then open `Audio Converter`, choose an input file, choose an output folder,
 choose a format, and click `Convert`.
 
-To check PATH-based detection:
+To check PATH-based fallback detection, temporarily move or rename
+`assets\ffmpeg\bin\ffmpeg.exe`, then run:
 
 ```powershell
 ffmpeg -version
@@ -62,4 +89,3 @@ python app/main.py
 
 The backend already models conversion options for speed, volume, trim, and
 pitch. The MVP UI does not expose those controls yet.
-

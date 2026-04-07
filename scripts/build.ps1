@@ -33,6 +33,24 @@ function Get-AppVersion {
     & $Python -c "from app.metadata import APP_VERSION; print(APP_VERSION)"
 }
 
+function Assert-BundledFFmpeg {
+    $ffmpegRoot = Join-Path $RepoRoot "assets\ffmpeg"
+    $requiredFiles = @(
+        "bin\ffmpeg.exe",
+        "bin\ffprobe.exe",
+        "README.txt",
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.md"
+    )
+
+    foreach ($relativePath in $requiredFiles) {
+        $path = Join-Path $ffmpegRoot $relativePath
+        if (-not (Test-Path $path)) {
+            throw "Missing bundled FFmpeg file: $path"
+        }
+    }
+}
+
 function Find-InnoSetupCompiler {
     $command = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
     if ($command) {
@@ -111,6 +129,8 @@ Set-Location $RepoRoot
 
 $Version = Get-AppVersion
 Write-Host "Building Tools v$Version"
+Assert-BundledFFmpeg
+Write-Host "Bundled FFmpeg files found in assets\ffmpeg"
 
 if (-not $NoClean) {
     foreach ($path in @($BuildDir, $DistDir)) {

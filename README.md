@@ -17,7 +17,7 @@ preparation, and a simple GitHub Releases update checker.
 - PyInstaller for Windows app packaging
 - Inno Setup for the Windows installer
 - GitHub Releases for release downloads and update checks
-- FFmpeg for the Audio Converter backend
+- Bundled FFmpeg for the Audio Converter backend
 - Manifest-based tool discovery under `tools/`
 
 ## Run Locally
@@ -99,23 +99,23 @@ See `docs/update-system.md` for implementation details.
 ## Audio Converter
 
 Audio Converter can convert one input audio file to `mp3`, `wav`, or `flac`.
-It uses FFmpeg and shows clear validation messages for missing input files,
-missing output folders, missing FFmpeg, existing output files, and failed
-conversions.
+It uses the FFmpeg binaries bundled in `assets/ffmpeg/bin` by default, so end
+users do not need to install FFmpeg manually. It still supports
+`TOOLS_FFMPEG_PATH` and system `PATH` as fallbacks.
 
 FFmpeg is detected in this order:
 
 ```text
+bundled assets\ffmpeg\bin\ffmpeg.exe
+bundled assets\ffmpeg\ffmpeg.exe
 TOOLS_FFMPEG_PATH
-app folder\ffmpeg.exe
-app folder\ffmpeg\ffmpeg.exe
-app folder\ffmpeg\bin\ffmpeg.exe
-assets\ffmpeg\ffmpeg.exe
-assets\ffmpeg\bin\ffmpeg.exe
-ffmpeg on PATH
+ffmpeg on system PATH
 ```
 
 See `docs/audio-converter.md` for testing and packaging notes.
+
+Bundled FFmpeg notices are kept in `assets/ffmpeg/README.txt`,
+`assets/ffmpeg/LICENSE`, and `assets/ffmpeg/THIRD_PARTY_NOTICES.md`.
 
 ## Project Structure
 
@@ -124,7 +124,7 @@ app/        PySide6 application entry point, UI, update flow, and core registry 
 tools/      Manifest-backed tool plugins, including Audio Converter
 shared/     Shared contracts for tools
 docs/       Project documentation
-assets/     Static assets placeholder for future icons, images, and optional FFmpeg files
+assets/     Static assets and bundled FFmpeg runtime files
 packaging/  PyInstaller and Inno Setup packaging files
 scripts/    Windows build scripts
 ```
