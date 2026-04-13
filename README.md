@@ -18,6 +18,7 @@ preparation, and a simple GitHub Releases update checker.
 - Inno Setup for the Windows installer
 - GitHub Releases for release downloads and update checks
 - Bundled FFmpeg for the Audio Converter backend
+- certifi CA bundle for updater HTTPS verification
 - Manifest-based tool discovery under `tools/`
 
 ## Run Locally
@@ -93,6 +94,10 @@ If a newer version exists, the app shows the current version, latest version,
 and a **Download update** button. The user downloads the installer, closes
 Tools, and runs the installer to update. The app does not patch itself in
 place and does not silently install updates.
+
+The updater keeps SSL verification enabled and uses an explicit SSL context
+created from `certifi.where()`. This avoids packaged-app certificate problems
+that can happen when bundled Python SSL defaults do not find a working CA store.
 
 See `docs/update-system.md` for implementation details.
 

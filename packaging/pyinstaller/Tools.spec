@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT_DIR = Path(SPECPATH).resolve().parents[1]
 TOOLS_DIR = ROOT_DIR / "tools"
@@ -38,6 +38,8 @@ if ASSETS_DIR.exists():
     datas.append((str(ASSETS_DIR), "assets"))
 else:
     raise FileNotFoundError(f"Assets directory was not found: {ASSETS_DIR}")
+
+datas.extend(collect_data_files("certifi"))
 
 for required_ffmpeg_file in (
     ASSETS_DIR / "ffmpeg" / "bin" / "ffmpeg.exe",

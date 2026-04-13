@@ -5,11 +5,13 @@ Tools uses a simple release-based update flow:
 1. The user opens Settings.
 2. The user clicks **Check for updates**.
 3. The app calls the GitHub Releases latest-release API.
-4. The app compares the release tag to the local `APP_VERSION`.
-5. If a newer version exists, the app shows the current version, latest
+4. The app creates an SSL context from `certifi.where()` and keeps certificate
+   verification enabled for the HTTPS request.
+5. The app compares the release tag to the local `APP_VERSION`.
+6. If a newer version exists, the app shows the current version, latest
    version, and a **Download update** button.
-6. The button opens the installer asset from the GitHub Release.
-7. The user closes Tools and runs the downloaded installer.
+7. The button opens the installer asset from the GitHub Release.
+8. The user closes Tools and runs the downloaded installer.
 
 This avoids risky in-place binary patching and keeps the update flow easy to
 debug.
@@ -32,6 +34,14 @@ GitHub's latest-release endpoint returns the latest published full release,
 which excludes draft and prerelease releases.
 
 GitHub API reference: https://docs.github.com/en/rest/releases/releases#get-the-latest-release
+
+## TLS Handling
+
+The updater uses Python's `ssl.create_default_context()` with
+`cafile=certifi.where()`. Certificate verification stays enabled.
+
+This keeps source and packaged builds using the same CA bundle instead of
+depending on packaged Python's default certificate lookup behavior.
 
 ## Installer Asset Selection
 

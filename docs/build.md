@@ -62,8 +62,10 @@ This keeps local development and packaged builds using the same manifest-based
 tool registry.
 
 The PyInstaller spec includes the whole `assets` folder, which includes
-`assets\ffmpeg`. Inno Setup installs the full PyInstaller output recursively,
-so the installer includes the bundled FFmpeg files automatically.
+`assets\ffmpeg`, and also includes `certifi` data so the packaged updater can
+verify GitHub TLS certificates with an explicit CA bundle. Inno Setup installs
+the full PyInstaller output recursively, so the installer includes the bundled
+FFmpeg files automatically.
 
 The bundled FFmpeg build is `8.1-essentials_build-www.gyan.dev`, licensed as
 GPL v3. Keep `assets\ffmpeg\README.txt`, `assets\ffmpeg\LICENSE`, and

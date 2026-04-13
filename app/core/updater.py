@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import re
+import ssl
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+import certifi
 
 from app.metadata import (
     APP_NAME,
@@ -82,9 +85,14 @@ class GitHubReleaseUpdateChecker:
                 "User-Agent": f"{APP_NAME}/{self.current_version}",
             },
         )
+        ssl_context = self._build_ssl_context()
 
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            with urlopen(
+                request,
+                timeout=self.timeout_seconds,
+                context=ssl_context,
+            ) as response:
                 payload = response.read().decode("utf-8")
         except HTTPError as error:
             if error.code == 404:
@@ -92,8 +100,10 @@ class GitHubReleaseUpdateChecker:
                     "No published GitHub release was found for this app."
                 ) from error
             raise UpdateCheckError(f"GitHub returned HTTP {error.code}.") from error
+        except ssl.SSLError as error:
+            raise UpdateCheckError(self._format_ssl_error(error)) from error
         except URLError as error:
-            raise UpdateCheckError(f"Unable to reach GitHub: {error.reason}") from error
+            raise UpdateCheckError(self._format_url_error(error)) from error
         except TimeoutError as error:
             raise UpdateCheckError("The update check timed out.") from error
 
@@ -106,6 +116,27 @@ class GitHubReleaseUpdateChecker:
             raise UpdateCheckError("GitHub returned an unexpected release response.")
 
         return data
+
+    @staticmethod
+    def _build_ssl_context() -> ssl.SSLContext:
+        return ssl.create_default_context(cafile=certifi.where())
+
+    @classmethod
+    def _format_url_error(cls, error: URLError) -> str:
+        reason = error.reason
+        if isinstance(reason, ssl.SSLError):
+            return cls._format_ssl_error(reason)
+
+        return f"Unable to reach GitHub: {reason}"
+
+    @staticmethod
+    def _format_ssl_error(error: ssl.SSLError) -> str:
+        detail = str(error) or error.__class__.__name__
+        return (
+            "SSL certificate verification failed while connecting to GitHub. "
+            "Tools now uses certifi CA certificates, so this usually means local "
+            f"HTTPS inspection or a network certificate issue. Detail: {detail}"
+        )
 
     @staticmethod
     def _parse_assets(raw_assets: object) -> list[ReleaseAsset]:
