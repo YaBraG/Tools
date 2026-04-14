@@ -1,25 +1,24 @@
 # Tools
 
 Tools is a Windows-only desktop launcher and workbench for small local
-utilities. It is built as a clean Python + PySide6 application with a
-manifest-driven plugin system so new tools can be added without changing the
-main window.
+utilities. It is built with Python and PySide6, uses a manifest-driven plugin
+system, and is prepared for real end-user distribution with PyInstaller,
+Inno Setup, and GitHub Releases.
 
-This repository currently contains a distribution-ready MVP scaffold: a dark
-desktop UI, sidebar navigation, searchable tool cards, a real Audio Converter
-tool, one File Renamer placeholder, PyInstaller packaging, Inno Setup installer
-preparation, and a simple GitHub Releases update checker.
+Today the repo includes:
+
+- Audio Tools: a real offline audio editing workspace powered by bundled FFmpeg
+- File Renamer: placeholder tool scaffold
 
 ## Stack
 
 - Python 3.12
-- PySide6 for the desktop UI
-- PyInstaller for Windows app packaging
-- Inno Setup for the Windows installer
-- GitHub Releases for release downloads and update checks
-- Bundled FFmpeg for the Audio Converter backend
-- certifi CA bundle for updater HTTPS verification
-- Manifest-based tool discovery under `tools/`
+- PySide6
+- PyInstaller
+- Inno Setup
+- GitHub Releases
+- Bundled FFmpeg
+- certifi for updater CA certificates
 
 ## Run Locally
 
@@ -31,6 +30,55 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 python app/main.py
 ```
+
+`python app/main.py` is the supported local entry point.
+
+## Audio Tools
+
+Audio Tools is the main real plugin in the current MVP. It opens one audio file
+into a unified workspace instead of separate mini-tools.
+
+Features in the first pass:
+
+- Open one local audio file
+- Drag and drop onto the waveform area
+- Switch editor modes with top tabs:
+  - Trim
+  - Volume
+  - Speed
+  - Pitch
+- Preview a waveform-style timeline
+- Preview the current edited result from the same workspace
+- Reset edits without touching the original file
+- Export to `mp3`, `wav`, `flac`, or `m4a`
+
+Supported input formats:
+
+- `mp3`
+- `wav`
+- `flac`
+- `m4a`
+- `aac`
+- `ogg`
+
+Supported export formats:
+
+- `mp3`
+- `wav`
+- `flac`
+- `m4a`
+
+FFmpeg detection order:
+
+1. Bundled FFmpeg in `assets\ffmpeg\bin`
+2. Bundled FFmpeg in `assets\ffmpeg`
+3. `TOOLS_FFMPEG_PATH`
+4. `ffmpeg` on system `PATH`
+
+In packaged builds, PyInstaller places bundled assets under
+`dist\Tools\_internal\assets\ffmpeg`, and the app resolves that automatically.
+
+See `docs/audio-tools.md` for behavior, testing, and FFmpeg notes.
 
 ## Build
 
@@ -46,97 +94,76 @@ Then build from the repository root:
 .\scripts\build.ps1
 ```
 
-Outputs:
+Current output examples for version `0.2.0`:
 
 ```text
 dist\Tools\Tools.exe
-dist\installer\Tools-Setup-v0.1.0.exe
+dist\installer\Tools-Setup-v0.2.0.exe
 ```
 
-If Inno Setup is not installed, the script still builds the PyInstaller app
-bundle and prints a warning for the installer step.
-
-To skip the installer intentionally:
+To skip the installer and only build the PyInstaller app bundle:
 
 ```powershell
 .\scripts\build.ps1 -SkipInstaller
 ```
 
-See `docs/build.md` for details.
+See `docs/build.md`.
 
-## Release Flow
+## Installer And Release Flow
 
-Tools uses GitHub Releases for distribution:
+1. Build the app and installer.
+2. Tag the release version.
+3. Push the tag.
+4. Create a GitHub Release.
+5. Upload the installer `.exe`.
+
+Example for the current version:
 
 ```powershell
 .\scripts\build.ps1
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
-Create a GitHub Release for the tag and upload:
+Installer asset:
 
 ```text
-dist\installer\Tools-Setup-v0.1.0.exe
+dist\installer\Tools-Setup-v0.2.0.exe
 ```
 
-See `docs/release.md` for the full checklist.
+See `docs/release.md`.
 
 ## Updates
 
-End users can open Settings and click **Check for updates**. The app checks:
+End users can open `Settings` and click `Check for updates`.
 
-```text
-https://api.github.com/repos/YaBraG/Tools/releases/latest
-```
+The app:
 
-If a newer version exists, the app shows the current version, latest version,
-and a **Download update** button. The user downloads the installer, closes
-Tools, and runs the installer to update. The app does not patch itself in
-place and does not silently install updates.
+1. Calls the GitHub latest-release API for `YaBraG/Tools`
+2. Uses an explicit SSL context created from `certifi.where()`
+3. Compares the latest release tag to `APP_VERSION`
+4. Shows current version, latest version, and a download action if an update exists
+5. Opens the new installer download or release page
 
-The updater keeps SSL verification enabled and uses an explicit SSL context
-created from `certifi.where()`. This avoids packaged-app certificate problems
-that can happen when bundled Python SSL defaults do not find a working CA store.
+The app does not patch itself in place and does not silently install updates.
 
-See `docs/update-system.md` for implementation details.
-
-## Audio Converter
-
-Audio Converter can convert one input audio file to `mp3`, `wav`, or `flac`.
-It uses the FFmpeg binaries bundled in `assets/ffmpeg/bin` by default, so end
-users do not need to install FFmpeg manually. It still supports
-`TOOLS_FFMPEG_PATH` and system `PATH` as fallbacks.
-
-FFmpeg is detected in this order:
-
-```text
-bundled assets\ffmpeg\bin\ffmpeg.exe
-bundled assets\ffmpeg\ffmpeg.exe
-TOOLS_FFMPEG_PATH
-ffmpeg on system PATH
-```
-
-See `docs/audio-converter.md` for testing and packaging notes.
-
-Bundled FFmpeg notices are kept in `assets/ffmpeg/README.txt`,
-`assets/ffmpeg/LICENSE`, and `assets/ffmpeg/THIRD_PARTY_NOTICES.md`.
+See `docs/update-system.md`.
 
 ## Project Structure
 
 ```text
-app/        PySide6 application entry point, UI, update flow, and core registry logic
-tools/      Manifest-backed tool plugins, including Audio Converter
-shared/     Shared contracts for tools
-docs/       Project documentation
+app/        Application entry point, UI, updater, and core registry logic
+tools/      Manifest-backed tool plugins, including Audio Tools
+shared/     Shared tool contracts
+docs/       Build, release, update, and tool documentation
 assets/     Static assets and bundled FFmpeg runtime files
-packaging/  PyInstaller and Inno Setup packaging files
+packaging/  PyInstaller and Inno Setup files
 scripts/    Windows build scripts
 ```
 
-## Adding a New Tool
+## Adding A New Tool
 
-Create a folder under `tools/` with this shape:
+Create a folder under `tools/`:
 
 ```text
 tools/
@@ -146,7 +173,7 @@ tools/
     tool.py
 ```
 
-Add a manifest:
+Manifest example:
 
 ```json
 {
@@ -160,7 +187,6 @@ Add a manifest:
 }
 ```
 
-Then implement `MyTool` with a `create_widget()` method that returns a PySide6
-`QWidget`. See `docs/adding-tools.md` for a complete example.
+Then implement `MyTool.create_widget()` and return a PySide6 `QWidget`.
 
-Restart the app and the new card will appear automatically.
+See `docs/adding-tools.md` for the full pattern.

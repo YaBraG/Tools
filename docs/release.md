@@ -24,12 +24,12 @@ Tools uses GitHub Releases as the distribution and update source.
 6. Create and push a matching Git tag:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 7. Create a GitHub Release for that tag.
-8. Upload the installer from `dist\installer\Tools-Setup-v0.1.0.exe`.
+8. Upload the installer from `dist\installer\Tools-Setup-v0.2.0.exe`.
 9. Publish the release.
 
 ## Asset Naming
@@ -37,7 +37,7 @@ git push origin v0.1.0
 Use this installer asset naming convention:
 
 ```text
-Tools-Setup-v0.1.0.exe
+Tools-Setup-v0.2.0.exe
 ```
 
 The updater looks for `.exe` release assets and prefers filenames containing
@@ -48,7 +48,7 @@ The updater looks for `.exe` release assets and prefers filenames containing
 If GitHub CLI is installed and authenticated:
 
 ```powershell
-gh release create v0.1.0 .\dist\installer\Tools-Setup-v0.1.0.exe --title "Tools v0.1.0" --notes "Initial installer release."
+gh release create v0.2.0 .\dist\installer\Tools-Setup-v0.2.0.exe --title "Tools v0.2.0" --notes "Audio Tools workspace release."
 ```
 
 The in-app updater reads the latest published full release from GitHub.

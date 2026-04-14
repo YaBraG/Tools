@@ -1,7 +1,7 @@
 # Build
 
-This project builds a Windows desktop app with PyInstaller and prepares a
-Windows installer with Inno Setup.
+This project builds the Tools Windows desktop app with PyInstaller and prepares
+a Windows installer with Inno Setup.
 
 ## Requirements
 
@@ -43,13 +43,14 @@ To build only the PyInstaller app bundle:
 ## Outputs
 
 - PyInstaller app bundle: `dist\Tools\Tools.exe`
-- Inno Setup installer: `dist\installer\Tools-Setup-v0.1.0.exe`
+- Inno Setup installer: `dist\installer\Tools-Setup-v0.2.0.exe`
 - Bundled FFmpeg in the app bundle:
   `dist\Tools\_internal\assets\ffmpeg\bin\ffmpeg.exe`
 - Bundled FFprobe in the app bundle:
   `dist\Tools\_internal\assets\ffmpeg\bin\ffprobe.exe`
 
-The version is read from `app/metadata.py`.
+The version is read from `app/metadata.py`. The current app version is
+`0.2.0`.
 
 ## How Tool Manifests Are Bundled
 

@@ -1,2 +1,1 @@
-"""Audio Converter tool."""
-
+"""Audio Tools plugin."""

@@ -1,10 +1,9 @@
 {
-  "id": "audio_converter",
-  "name": "Audio Converter",
-  "description": "Convert one audio file to MP3, WAV, or FLAC using FFmpeg.",
-  "entry_point": "tools.audio_converter.tool:AudioConverterTool",
-  "version": "0.1.0",
+  "id": "audio_tools",
+  "name": "Audio Tools",
+  "description": "Edit one local audio file with trim, volume, speed, and pitch controls before export.",
+  "entry_point": "tools.audio_converter.tool:AudioToolsTool",
+  "version": "0.2.0",
   "category": "Audio",
-  "tags": ["audio", "convert", "ffmpeg"]
+  "tags": ["audio", "edit", "trim", "ffmpeg"]
 }
-
