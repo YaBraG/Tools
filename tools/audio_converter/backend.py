@@ -22,6 +22,7 @@ from tools.audio_converter.models import (
     MIN_TRIM_SPAN_SECONDS,
     SUPPORTED_INPUT_FORMATS,
     SUPPORTED_OUTPUT_FORMATS,
+    TRIM_EPSILON_SECONDS,
 )
 
 
@@ -179,7 +180,7 @@ class AudioToolsService:
         if not output_file.parent.exists():
             raise AudioToolsError(f"Output folder does not exist: {output_file.parent}")
 
-        filters = self._build_filters(audio_file.duration_seconds, state)
+        filters = self._build_filters(audio_file, state)
         arguments = self._build_ffmpeg_arguments(
             audio_file.path,
             output_file,
@@ -209,7 +210,7 @@ class AudioToolsService:
             raise AudioToolsError(f"Preview folder does not exist: {output_file.parent}")
 
         normalized_output = output_file.with_suffix(".wav")
-        filters = self._build_filters(audio_file.duration_seconds, state)
+        filters = self._build_filters(audio_file, state)
         arguments = self._build_ffmpeg_arguments(
             audio_file.path,
             normalized_output,
@@ -260,10 +261,17 @@ class AudioToolsService:
         if state.output_format not in SUPPORTED_OUTPUT_FORMATS:
             raise AudioToolsError(f"Unsupported output format: {state.output_format}")
 
-        if not (0.0 <= state.trim_start_seconds < state.trim_end_seconds <= audio_file.duration_seconds):
+        editor_duration = audio_file.editor_duration_seconds
+        trim_end_seconds = AudioToolsService.resolve_trim_end_seconds(audio_file, state)
+        if not (
+            0.0 <= state.trim_start_seconds < state.trim_end_seconds <= editor_duration + TRIM_EPSILON_SECONDS
+        ):
             raise AudioToolsError("Trim range is invalid.")
 
-        if state.trim_end_seconds - state.trim_start_seconds < MIN_TRIM_SPAN_SECONDS:
+        if not (0.0 <= state.trim_start_seconds < trim_end_seconds <= audio_file.duration_seconds):
+            raise AudioToolsError("Trim range is invalid.")
+
+        if trim_end_seconds - state.trim_start_seconds < MIN_TRIM_SPAN_SECONDS:
             raise AudioToolsError("Trim range is too small.")
 
         if not (MIN_SPEED <= state.speed_multiplier <= MAX_SPEED):
@@ -378,14 +386,22 @@ class AudioToolsService:
         return arguments
 
     @staticmethod
-    def _build_filters(duration_seconds: float, state: AudioEditState) -> list[str]:
+    def resolve_trim_end_seconds(audio_file: AudioFileInfo, state: AudioEditState) -> float:
+        editor_duration = audio_file.editor_duration_seconds
+        if state.trim_end_seconds >= editor_duration - TRIM_EPSILON_SECONDS:
+            return audio_file.duration_seconds
+        return max(0.0, min(state.trim_end_seconds, audio_file.duration_seconds))
+
+    @classmethod
+    def _build_filters(cls, audio_file: AudioFileInfo, state: AudioEditState) -> list[str]:
         filters: list[str] = []
+        actual_trim_end = cls.resolve_trim_end_seconds(audio_file, state)
         if (
             state.trim_start_seconds > 0.0
-            or state.trim_end_seconds < duration_seconds
+            or actual_trim_end < audio_file.duration_seconds - TRIM_EPSILON_SECONDS
         ):
             filters.append(
-                f"atrim=start={state.trim_start_seconds:g}:end={state.trim_end_seconds:g}"
+                f"atrim=start={state.trim_start_seconds:g}:end={actual_trim_end:g}"
             )
             filters.append("asetpts=PTS-STARTPTS")
 

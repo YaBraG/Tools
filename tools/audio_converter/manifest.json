@@ -1,9 +1,9 @@
 {
   "id": "audio_tools",
   "name": "Audio Tools",
-  "description": "Edit one local audio file with trim, volume, speed, and pitch controls before export.",
+  "description": "Record or edit one local audio file with trim, volume, speed, and pitch controls before export.",
   "entry_point": "tools.audio_converter.tool:AudioToolsTool",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "category": "Audio",
-  "tags": ["audio", "edit", "trim", "ffmpeg"]
+  "tags": ["audio", "edit", "record", "trim", "ffmpeg"]
 }

@@ -6,28 +6,31 @@ It replaces the old one-shot Audio Converter flow with one unified editor.
 ## Workspace Flow
 
 1. Open `Audio Tools`
-2. Choose one input file or drop it on the waveform area
-3. Switch modes from the top tab row
+2. Choose one input file, record from the microphone, or drop a file on the waveform area
+3. Keep trim controls available while switching modes from the top tab row
 4. Adjust settings without changing the source file
 5. Click `Preview` to hear the current edited result
 6. Click `Save Export`
 7. Choose the output file location and export format
+8. Optionally load the exported audio back into the workspace
 
 The original input file is never modified in place.
 
-## Modes
-
-### Trim
+## Trim
 
 - Numeric start and end inputs
 - Draggable waveform range handles
+- `0.01` second precision in the numeric inputs and summary text
 - Validation for invalid or too-small trim ranges
+- Available in every editor mode
 
 FFmpeg filters:
 
 ```text
 atrim=start=...:end=...,asetpts=PTS-STARTPTS
 ```
+
+## Modes
 
 ### Volume
 
@@ -67,6 +70,21 @@ rubberband=pitch=...
 
 The bundled FFmpeg build includes `librubberband`, so pitch export works
 without a separate install.
+
+## Recording
+
+- `Record Audio` uses the local Windows microphone through Qt Multimedia
+- Recording stays inside the same Audio Tools workspace
+- Supported recording save formats:
+  - `wav`
+  - `mp3`
+  - `flac`
+  - `m4a`
+- After recording stops successfully, the new file loads into Audio Tools automatically
+
+If recording cannot start, Audio Tools shows a clear status message instead of
+crashing. Common causes include no microphone device, Windows microphone
+privacy restrictions, or an unsupported recording backend.
 
 ## Supported Formats
 
@@ -136,9 +154,19 @@ Then test these paths:
 
 1. Open a supported audio file
 2. Drag the trim handles or edit start/end values
-3. Use `Preview` and confirm playback starts at the selected trim range
-4. Export to a new file
-5. Confirm the output duration matches the selected range
+3. Move the end handle back to the original full-file end and confirm it is accepted
+4. Use `Preview` and confirm playback starts at the selected trim range
+5. Switch to `Volume`, `Speed`, or `Pitch` and confirm trim controls stay available
+6. Export to a new file
+7. Confirm the output duration matches the selected range
+
+### Recording
+
+1. Click `Record Audio`
+2. Choose a recording file name and format
+3. Speak into the microphone and click `Stop Recording`
+4. Confirm the new file loads into Audio Tools automatically
+5. Use `Preview` and `Save Export` on the recorded file
 
 ### Volume
 
@@ -173,4 +201,4 @@ Then test these paths:
   sample-by-sample live DSP
 - The waveform is a simplified generated preview, not a sample-accurate editor
 - Save/export applies the current UI state once; there is no history stack yet
-- No recording, batch mode, equalizer, reverse, or multi-file workflow yet
+- No batch mode, equalizer, reverse, or multi-file workflow yet

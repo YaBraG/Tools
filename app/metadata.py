@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 APP_NAME = "Tools"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 GITHUB_REPOSITORY = "YaBraG/Tools"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPOSITORY}/releases"
 GITHUB_LATEST_RELEASE_API_URL = (
@@ -9,4 +9,3 @@ GITHUB_LATEST_RELEASE_API_URL = (
 )
 INSTALLER_ASSET_SUFFIXES = (".exe",)
 INSTALLER_ASSET_KEYWORDS = ("setup", "installer")
-

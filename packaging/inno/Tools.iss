@@ -3,7 +3,7 @@
 #define MyAppExeName "Tools.exe"
 
 #ifndef MyAppVersion
-#define MyAppVersion "0.2.0"
+#define MyAppVersion "0.3.0"
 #endif
 
 #ifndef SourceDir

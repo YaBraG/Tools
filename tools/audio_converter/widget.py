@@ -2,10 +2,19 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QSignalBlocker, Qt, QUrl
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimedia import (
+    QAudioInput,
+    QAudioOutput,
+    QMediaCaptureSession,
+    QMediaDevices,
+    QMediaFormat,
+    QMediaPlayer,
+    QMediaRecorder,
+)
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -14,6 +23,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSlider,
     QStackedWidget,
@@ -30,6 +40,7 @@ from tools.audio_converter.backend import (
 from tools.audio_converter.models import (
     AudioEditState,
     AudioFileInfo,
+    DEFAULT_EDITOR_MODE,
     EDITOR_MODES,
     MAX_PITCH,
     MAX_SPEED,
@@ -67,6 +78,15 @@ class AudioToolsWidget(QWidget):
         self.current_media_kind = "none"
         self.current_media_duration_ms = 0
         self.current_source_range = (0.0, 0.0)
+        self.is_busy = False
+
+        self.capture_session: QMediaCaptureSession | None = None
+        self.recording_audio_input: QAudioInput | None = None
+        self.media_recorder: QMediaRecorder | None = None
+        self.recording_output_path: Path | None = None
+        self.is_recording = False
+        self.is_finishing_recording = False
+        self.recording_error_message = ""
 
         self.media_player = QMediaPlayer(self)
         self.audio_output = QAudioOutput(self)
@@ -77,10 +97,11 @@ class AudioToolsWidget(QWidget):
 
         self._build_ui()
         self._connect_media_signals()
-        self._set_mode("trim")
+        self._set_mode(DEFAULT_EDITOR_MODE)
         self._update_waveform()
         self._update_editor_ui()
         self._update_playback_hint()
+        self._refresh_control_state()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -97,6 +118,10 @@ class AudioToolsWidget(QWidget):
         self.open_button.setObjectName("secondaryButton")
         self.open_button.clicked.connect(self._choose_audio_file)
 
+        self.record_button = QPushButton("Record Audio")
+        self.record_button.setObjectName("secondaryButton")
+        self.record_button.clicked.connect(self._toggle_recording)
+
         self.play_button = QPushButton("Preview")
         self.play_button.setObjectName("secondaryButton")
         self.play_button.clicked.connect(self._toggle_playback)
@@ -107,6 +132,7 @@ class AudioToolsWidget(QWidget):
 
         top_row.addWidget(self.file_label, 1)
         top_row.addWidget(self.open_button)
+        top_row.addWidget(self.record_button)
         top_row.addWidget(self.play_button)
         top_row.addWidget(self.reset_button)
 
@@ -122,7 +148,6 @@ class AudioToolsWidget(QWidget):
         mode_row.setSpacing(10)
         self.mode_buttons: dict[str, QPushButton] = {}
         for mode_key, label in (
-            ("trim", "Trim"),
             ("volume", "Volume"),
             ("speed", "Speed"),
             ("pitch", "Pitch"),
@@ -149,8 +174,8 @@ class AudioToolsWidget(QWidget):
         controls_layout.setContentsMargins(18, 18, 18, 18)
         controls_layout.setSpacing(14)
 
+        controls_layout.addWidget(self._build_trim_page())
         self.mode_stack = QStackedWidget()
-        self.mode_stack.addWidget(self._build_trim_page())
         self.mode_stack.addWidget(self._build_volume_page())
         self.mode_stack.addWidget(self._build_speed_page())
         self.mode_stack.addWidget(self._build_pitch_page())
@@ -208,7 +233,7 @@ class AudioToolsWidget(QWidget):
         layout.setSpacing(12)
 
         help_text = QLabel(
-            "Set trim start and end. Drag waveform handles or type exact times."
+            "Trim is always active. Drag waveform handles or type exact start and end times."
         )
         help_text.setObjectName("panelBody")
         help_text.setWordWrap(True)
@@ -336,6 +361,56 @@ class AudioToolsWidget(QWidget):
         self.media_player.durationChanged.connect(self._on_player_duration_changed)
         self.media_player.playbackStateChanged.connect(self._on_playback_state_changed)
 
+    def _choose_recording_target(self) -> tuple[Path | None, str]:
+        default_name = f"recording-{datetime.now():%Y%m%d-%H%M%S}.wav"
+        selected_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save recording as",
+            default_name,
+            self._recording_filters(),
+        )
+        if not selected_path:
+            return None, "wav"
+
+        output_format = self._format_from_dialog_selection(selected_path, selected_filter, "wav")
+        output_path = self.service.normalize_output_path(Path(selected_path), output_format)
+        if output_path.exists():
+            self._set_status(
+                f"Recording file already exists: {output_path}. Choose a new file name.",
+                "error",
+            )
+            return None, output_format
+
+        if not output_path.parent.exists():
+            self._set_status(
+                f"Recording folder does not exist: {output_path.parent}",
+                "error",
+            )
+            return None, output_format
+
+        return output_path, output_format
+
+    @staticmethod
+    def _recording_media_format(output_format: str) -> QMediaFormat:
+        media_format = QMediaFormat()
+        if output_format == "wav":
+            media_format.setFileFormat(QMediaFormat.FileFormat.Wave)
+            media_format.setAudioCodec(QMediaFormat.AudioCodec.Wave)
+            return media_format
+        if output_format == "mp3":
+            media_format.setFileFormat(QMediaFormat.FileFormat.MP3)
+            media_format.setAudioCodec(QMediaFormat.AudioCodec.MP3)
+            return media_format
+        if output_format == "flac":
+            media_format.setFileFormat(QMediaFormat.FileFormat.FLAC)
+            media_format.setAudioCodec(QMediaFormat.AudioCodec.FLAC)
+            return media_format
+        if output_format == "m4a":
+            media_format.setFileFormat(QMediaFormat.FileFormat.Mpeg4Audio)
+            media_format.setAudioCodec(QMediaFormat.AudioCodec.AAC)
+            return media_format
+        raise AudioToolsError(f"Unsupported recording format: {output_format}")
+
     def _choose_audio_file(self) -> None:
         filter_patterns = " ".join(f"*.{extension}" for extension in SUPPORTED_INPUT_FORMATS)
         file_name, _ = QFileDialog.getOpenFileName(
@@ -346,6 +421,79 @@ class AudioToolsWidget(QWidget):
         )
         if file_name:
             self._load_audio_file(Path(file_name))
+
+    def _toggle_recording(self) -> None:
+        if self.media_recorder is not None and self.is_recording:
+            self._stop_recording()
+            return
+        self._start_recording()
+
+    def _start_recording(self) -> None:
+        output_path, output_format = self._choose_recording_target()
+        if output_path is None:
+            return
+
+        audio_inputs = QMediaDevices.audioInputs()
+        default_input = QMediaDevices.defaultAudioInput()
+        if not audio_inputs:
+            self._set_status(
+                "No microphone is available. Connect or enable a microphone in Windows and try again.",
+                "error",
+            )
+            return
+        audio_input_device = default_input if not default_input.isNull() else audio_inputs[0]
+
+        media_format = self._recording_media_format(output_format)
+        if not media_format.isSupported(QMediaFormat.ConversionMode.Encode):
+            self._set_status(
+                f"This system cannot record directly to .{output_format}. Try WAV or another supported format.",
+                "error",
+            )
+            return
+
+        self._teardown_recording_session()
+        self._reset_playback_state()
+
+        self.capture_session = QMediaCaptureSession(self)
+        self.recording_audio_input = QAudioInput(audio_input_device, self)
+        self.media_recorder = QMediaRecorder(self)
+        self.capture_session.setAudioInput(self.recording_audio_input)
+        self.capture_session.setRecorder(self.media_recorder)
+        self.media_recorder.setMediaFormat(media_format)
+        self.media_recorder.setOutputLocation(QUrl.fromLocalFile(str(output_path)))
+        self.media_recorder.setAudioSampleRate(44100)
+        self.media_recorder.setAudioChannelCount(2)
+        self.media_recorder.setQuality(QMediaRecorder.Quality.NormalQuality)
+        self.media_recorder.recorderStateChanged.connect(self._on_recorder_state_changed)
+        self.media_recorder.errorOccurred.connect(self._on_recorder_error)
+
+        if not self.media_recorder.isAvailable():
+            self._set_status(
+                "Audio recording is unavailable on this system. Check Windows microphone access and multimedia support.",
+                "error",
+            )
+            self._teardown_recording_session()
+            return
+
+        self.recording_output_path = output_path
+        self.recording_error_message = ""
+        self.is_recording = True
+        self.is_finishing_recording = False
+        self._refresh_control_state()
+        self._update_playback_hint()
+        self._set_status(
+            f"Recording from {audio_input_device.description()}. Click Stop Recording when finished."
+        )
+        self.media_recorder.record()
+
+    def _stop_recording(self) -> None:
+        if self.media_recorder is None or not self.is_recording:
+            return
+
+        self.is_finishing_recording = True
+        self._refresh_control_state()
+        self._set_status("Finishing recording...")
+        self.media_recorder.stop()
 
     def _load_audio_file(self, path: Path) -> None:
         self._reset_playback_state()
@@ -361,18 +509,18 @@ class AudioToolsWidget(QWidget):
             return
 
         self.audio_file = audio_file
-        self.state.reset(audio_file.duration_seconds)
+        self.state.reset(audio_file.editor_duration_seconds)
         self.file_label.setText(audio_file.display_name)
         self.waveform.set_audio(
             audio_file.display_name,
             audio_file.waveform_points,
-            audio_file.duration_seconds,
+            audio_file.editor_duration_seconds,
         )
         self._load_media_source(
             audio_file.path,
             media_kind="source",
             signature=self._current_result_signature(),
-            source_range=(0.0, audio_file.duration_seconds),
+            source_range=(0.0, audio_file.editor_duration_seconds),
         )
         self._update_editor_ui()
         self._set_status("Audio loaded. Preview uses the current edits.")
@@ -384,9 +532,9 @@ class AudioToolsWidget(QWidget):
         self.state.active_mode = mode
         mode_index = EDITOR_MODES.index(mode)
         self.mode_stack.setCurrentIndex(mode_index)
-        self.waveform.set_trim_editable(mode == "trim")
         for mode_key, button in self.mode_buttons.items():
             button.setChecked(mode_key == mode)
+        self._refresh_control_state()
 
     def _reset_state(self) -> None:
         if self.audio_file is None:
@@ -394,7 +542,7 @@ class AudioToolsWidget(QWidget):
             self._set_idle_state("Workspace reset.")
             return
 
-        self.state.reset(self.audio_file.duration_seconds)
+        self.state.reset(self.audio_file.editor_duration_seconds)
         self._reset_playback_state()
         self._restore_source_media_state(playhead_seconds=0.0)
         self._update_editor_ui()
@@ -436,7 +584,7 @@ class AudioToolsWidget(QWidget):
                 self.audio_file.path,
                 media_kind="source",
                 signature=signature,
-                source_range=(0.0, self.audio_file.duration_seconds),
+                source_range=(0.0, self.audio_file.editor_duration_seconds),
             )
             self.media_player.setPosition(0)
             self.media_player.play()
@@ -638,11 +786,14 @@ class AudioToolsWidget(QWidget):
     ) -> None:
         output_path = self.pending_output_path
         self._set_busy(False)
+        self.export_process = None
+        self.pending_output_path = None
 
         if exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0 and output_path is not None:
             self.state.last_export_path = output_path
             self._update_export_preview()
             self._set_status(f"Export complete: {output_path}", "success")
+            self._prompt_load_exported_file(output_path)
         else:
             details = self._short_error(self.export_stderr)
             self._set_status(
@@ -650,9 +801,7 @@ class AudioToolsWidget(QWidget):
                 f"{details}",
                 "error",
             )
-
-        self.export_process = None
-        self.pending_output_path = None
+        self.export_stderr = ""
 
     def _handle_preview_finished(
         self,
@@ -714,6 +863,88 @@ class AudioToolsWidget(QWidget):
             self.preview_stderr = ""
             self._update_playback_hint()
 
+    def _on_recorder_state_changed(
+        self,
+        state: QMediaRecorder.RecorderState,
+    ) -> None:
+        if state == QMediaRecorder.RecorderState.RecordingState:
+            self.is_recording = True
+            self.is_finishing_recording = False
+            self._refresh_control_state()
+            self._update_playback_hint()
+            return
+
+        if state != QMediaRecorder.RecorderState.StoppedState:
+            return
+
+        was_recording = self.is_recording or self.is_finishing_recording
+        self.is_recording = False
+        self.is_finishing_recording = False
+        self._refresh_control_state()
+        self._update_playback_hint()
+
+        output_path = self._resolved_recording_output_path()
+        error_message = self.recording_error_message
+        self._teardown_recording_session()
+        if not was_recording:
+            return
+
+        if error_message:
+            self._set_status(error_message, "error")
+            return
+
+        if output_path is None or not output_path.exists() or output_path.stat().st_size == 0:
+            if output_path is not None and output_path.exists():
+                output_path.unlink(missing_ok=True)
+            self._set_status(
+                "Recording stopped, but no audio file was created. Check microphone permissions and try again.",
+                "error",
+            )
+            return
+
+        self._load_audio_file(output_path)
+        if self.audio_file is not None and self.audio_file.path == output_path:
+            self._set_status(f"Recording saved and loaded: {output_path}", "success")
+
+    def _on_recorder_error(
+        self,
+        error: QMediaRecorder.Error,
+        error_message: str,
+    ) -> None:
+        if error == QMediaRecorder.Error.NoError:
+            return
+
+        details = error_message.strip()
+        if not details and self.media_recorder is not None:
+            details = self.media_recorder.errorString().strip()
+        if details:
+            details = f"\n\n{details}"
+        self.recording_error_message = (
+            "Recording failed. Check microphone privacy settings, device availability, "
+            "or the selected recording format."
+            f"{details}"
+        )
+
+    def _resolved_recording_output_path(self) -> Path | None:
+        if self.media_recorder is not None:
+            actual_location = self.media_recorder.actualLocation().toLocalFile()
+            if actual_location:
+                return Path(actual_location)
+        return self.recording_output_path
+
+    def _teardown_recording_session(self) -> None:
+        if self.media_recorder is not None:
+            self.media_recorder.deleteLater()
+        if self.recording_audio_input is not None:
+            self.recording_audio_input.deleteLater()
+        if self.capture_session is not None:
+            self.capture_session.deleteLater()
+        self.media_recorder = None
+        self.recording_audio_input = None
+        self.capture_session = None
+        self.recording_output_path = None
+        self.recording_error_message = ""
+
     def _update_editor_ui(self) -> None:
         if self.audio_file is None:
             with QSignalBlocker(self.trim_start_spin):
@@ -738,7 +969,7 @@ class AudioToolsWidget(QWidget):
             self._update_playback_hint()
             return
 
-        duration = self.audio_file.duration_seconds
+        duration = self.audio_file.editor_duration_seconds
         with QSignalBlocker(self.trim_start_spin):
             self.trim_start_spin.setRange(0.0, max(0.0, duration))
             self.trim_start_spin.setValue(self.state.trim_start_seconds)
@@ -794,7 +1025,11 @@ class AudioToolsWidget(QWidget):
         self.export_preview_label.setText(f"Export preview: {suggested_path}")
 
     def _update_playback_hint(self) -> None:
-        if self.audio_file is None:
+        if self.is_finishing_recording:
+            message = "Recording: finalizing the saved file..."
+        elif self.is_recording:
+            message = "Recording: capturing microphone input. Stop recording to return to preview."
+        elif self.audio_file is None:
             message = "Preview: load audio to hear the current result."
         elif self.preview_process is not None:
             message = "Preview: generating edited audio..."
@@ -817,17 +1052,29 @@ class AudioToolsWidget(QWidget):
         self.status_label.style().polish(self.status_label)
 
     def _set_busy(self, is_busy: bool) -> None:
-        self.open_button.setEnabled(not is_busy)
-        self.play_button.setEnabled(not is_busy)
-        self.reset_button.setEnabled(not is_busy)
-        self.export_button.setEnabled(not is_busy)
-        self.format_combo.setEnabled(not is_busy)
-        self.waveform.setEnabled(not is_busy)
-        self.waveform.set_trim_editable(
-            self.state.active_mode == "trim" and not is_busy
+        self.is_busy = is_busy
+        self._refresh_control_state()
+
+    def _refresh_control_state(self) -> None:
+        controls_enabled = not self.is_busy and not self.is_recording and not self.is_finishing_recording
+        has_audio = self.audio_file is not None
+        self.open_button.setEnabled(not self.is_busy and not self.is_recording)
+        self.record_button.setEnabled(not self.is_busy and not self.is_finishing_recording)
+        self.record_button.setText(
+            "Stopping..."
+            if self.is_finishing_recording
+            else "Stop Recording"
+            if self.is_recording
+            else "Record Audio"
         )
+        self.play_button.setEnabled(controls_enabled and has_audio)
+        self.reset_button.setEnabled(controls_enabled)
+        self.export_button.setEnabled(controls_enabled and has_audio)
+        self.format_combo.setEnabled(controls_enabled and has_audio)
+        self.waveform.setEnabled(controls_enabled)
+        self.waveform.set_trim_editable(controls_enabled)
         for button in self.mode_buttons.values():
-            button.setEnabled(not is_busy)
+            button.setEnabled(controls_enabled and has_audio)
         for control in (
             self.trim_start_spin,
             self.trim_end_spin,
@@ -835,7 +1082,25 @@ class AudioToolsWidget(QWidget):
             self.speed_slider,
             self.pitch_slider,
         ):
-            control.setEnabled(not is_busy)
+            control.setEnabled(controls_enabled and has_audio)
+
+    def _prompt_load_exported_file(self, output_path: Path) -> None:
+        response = QMessageBox.question(
+            self,
+            "Export complete",
+            "The export finished successfully.\n\n"
+            f"Current file: {self.file_label.text()}\n"
+            f"New file: {output_path.name}\n\n"
+            "Load the exported audio into Audio Tools now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if response != QMessageBox.StandardButton.Yes:
+            return
+
+        self._load_audio_file(output_path)
+        if self.audio_file is not None and self.audio_file.path == output_path:
+            self._set_status(f"Loaded exported audio: {output_path}", "success")
 
     def _load_media_source(
         self,
@@ -903,10 +1168,10 @@ class AudioToolsWidget(QWidget):
             self.audio_file.path,
             media_kind="source",
             signature=None,
-            source_range=(0.0, self.audio_file.duration_seconds),
+            source_range=(0.0, self.audio_file.editor_duration_seconds),
         )
         self.waveform.set_playback_seconds(
-            max(0.0, min(playhead_seconds, self.audio_file.duration_seconds))
+            max(0.0, min(playhead_seconds, self.audio_file.editor_duration_seconds))
         )
 
     def _set_idle_state(self, message: str) -> None:
@@ -914,7 +1179,7 @@ class AudioToolsWidget(QWidget):
         self.state = AudioEditState(output_format="mp3")
         self.file_label.setText("No audio loaded")
         self.waveform.clear_audio()
-        self._set_mode("trim")
+        self._set_mode(DEFAULT_EDITOR_MODE)
         self._update_editor_ui()
         self._set_status(message)
 
@@ -928,7 +1193,7 @@ class AudioToolsWidget(QWidget):
         if self.audio_file is None:
             return 0.0, 0.0
 
-        duration = self.audio_file.duration_seconds
+        duration = self.audio_file.editor_duration_seconds
         start_seconds = round(max(0.0, min(start_seconds, duration)), 2)
         end_seconds = round(max(0.0, min(end_seconds, duration)), 2)
 
@@ -962,7 +1227,7 @@ class AudioToolsWidget(QWidget):
 
         trim_changed = (
             self.state.trim_start_seconds > 0.0
-            or abs(self.state.trim_end_seconds - self.audio_file.duration_seconds)
+            or abs(self.state.trim_end_seconds - self.audio_file.editor_duration_seconds)
             >= 0.005
         )
         return (
@@ -1029,19 +1294,44 @@ class AudioToolsWidget(QWidget):
         if self.export_process is not None:
             self.export_process.kill()
             self.export_process.waitForFinished(1000)
+        if self.media_recorder is not None and self.media_recorder.recorderState() != QMediaRecorder.RecorderState.StoppedState:
+            self.media_recorder.stop()
+        self._teardown_recording_session()
         self.media_player.stop()
         self.media_player.setSource(QUrl())
         shutil.rmtree(self.preview_directory, ignore_errors=True)
 
     @staticmethod
     def _export_filter(output_format: str) -> str:
-        mapping = {
+        return f"{AudioToolsWidget._dialog_filters()[output_format]};;All files (*.*)"
+
+    @staticmethod
+    def _recording_filters() -> str:
+        return ";;".join(AudioToolsWidget._dialog_filters().values())
+
+    @staticmethod
+    def _dialog_filters() -> dict[str, str]:
+        return {
             "mp3": "MP3 Audio (*.mp3)",
             "wav": "WAV Audio (*.wav)",
             "flac": "FLAC Audio (*.flac)",
             "m4a": "M4A Audio (*.m4a)",
         }
-        return f"{mapping[output_format]};;All files (*.*)"
+
+    @staticmethod
+    def _format_from_dialog_selection(
+        selected_path: str,
+        selected_filter: str,
+        fallback_format: str,
+    ) -> str:
+        extension = Path(selected_path).suffix.lower().lstrip(".")
+        if extension in SUPPORTED_OUTPUT_FORMATS:
+            return extension
+
+        for output_format, dialog_filter in AudioToolsWidget._dialog_filters().items():
+            if selected_filter == dialog_filter:
+                return output_format
+        return fallback_format
 
     @staticmethod
     def _short_error(stderr: str) -> str:

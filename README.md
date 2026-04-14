@@ -41,9 +41,10 @@ into a unified workspace instead of separate mini-tools.
 Features in the first pass:
 
 - Open one local audio file
+- Record audio from the local microphone into `wav`, `mp3`, `flac`, or `m4a`
 - Drag and drop onto the waveform area
+- Keep trim controls available while switching between `Volume`, `Speed`, and `Pitch`
 - Switch editor modes with top tabs:
-  - Trim
   - Volume
   - Speed
   - Pitch
@@ -51,6 +52,7 @@ Features in the first pass:
 - Preview the current edited result from the same workspace
 - Reset edits without touching the original file
 - Export to `mp3`, `wav`, `flac`, or `m4a`
+- Optionally load the exported file back into Audio Tools after save
 
 Supported input formats:
 
@@ -94,11 +96,11 @@ Then build from the repository root:
 .\scripts\build.ps1
 ```
 
-Current output examples for version `0.2.0`:
+Current output examples for version `0.3.0`:
 
 ```text
 dist\Tools\Tools.exe
-dist\installer\Tools-Setup-v0.2.0.exe
+dist\installer\Tools-Setup-v0.3.0.exe
 ```
 
 To skip the installer and only build the PyInstaller app bundle:
@@ -121,14 +123,14 @@ Example for the current version:
 
 ```powershell
 .\scripts\build.ps1
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Installer asset:
 
 ```text
-dist\installer\Tools-Setup-v0.2.0.exe
+dist\installer\Tools-Setup-v0.3.0.exe
 ```
 
 See `docs/release.md`.

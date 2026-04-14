@@ -5,12 +5,16 @@ from pathlib import Path
 
 SUPPORTED_INPUT_FORMATS = ("mp3", "wav", "flac", "m4a", "aac", "ogg")
 SUPPORTED_OUTPUT_FORMATS = ("mp3", "wav", "flac", "m4a")
-EDITOR_MODES = ("trim", "volume", "speed", "pitch")
+EDITOR_MODES = ("volume", "speed", "pitch")
+DEFAULT_EDITOR_MODE = "volume"
 MIN_SPEED = 0.5
 MAX_SPEED = 2.0
 MIN_PITCH = -12
 MAX_PITCH = 12
 MIN_TRIM_SPAN_SECONDS = 0.05
+TRIM_PRECISION_DIGITS = 2
+TRIM_PRECISION_SECONDS = 0.01
+TRIM_EPSILON_SECONDS = TRIM_PRECISION_SECONDS / 2.0
 
 
 @dataclass(frozen=True)
@@ -23,6 +27,10 @@ class AudioFileInfo:
     def display_name(self) -> str:
         return self.path.name
 
+    @property
+    def editor_duration_seconds(self) -> float:
+        return round(self.duration_seconds, TRIM_PRECISION_DIGITS)
+
 
 @dataclass
 class AudioEditState:
@@ -33,7 +41,7 @@ class AudioEditState:
     pitch_semitones: int = 0
     output_format: str = "mp3"
     last_export_path: Path | None = None
-    active_mode: str = "trim"
+    active_mode: str = DEFAULT_EDITOR_MODE
 
     def reset(self, duration_seconds: float) -> None:
         self.trim_start_seconds = 0.0
@@ -45,7 +53,7 @@ class AudioEditState:
         if self.output_format not in SUPPORTED_OUTPUT_FORMATS:
             self.output_format = "mp3"
         if self.active_mode not in EDITOR_MODES:
-            self.active_mode = "trim"
+            self.active_mode = DEFAULT_EDITOR_MODE
 
     @property
     def speed_multiplier(self) -> float:
@@ -79,4 +87,3 @@ class ExportPlan:
     arguments: list[str]
     output_file: Path
     applied_filters: tuple[str, ...] = field(default_factory=tuple)
-
