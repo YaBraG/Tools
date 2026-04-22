@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.ui.widgets.file_drop_card import FileDropCard
 from shared.tool_base import ToolContext
 from tools.audio_converter.backend import (
     AudioToolsError,
@@ -114,10 +115,6 @@ class AudioToolsWidget(QWidget):
         self.file_label = QLabel("No audio loaded")
         self.file_label.setObjectName("workspaceTitle")
 
-        self.open_button = QPushButton("Open Audio")
-        self.open_button.setObjectName("secondaryButton")
-        self.open_button.clicked.connect(self._choose_audio_file)
-
         self.record_button = QPushButton("Record Audio")
         self.record_button.setObjectName("secondaryButton")
         self.record_button.clicked.connect(self._toggle_recording)
@@ -131,10 +128,22 @@ class AudioToolsWidget(QWidget):
         self.reset_button.clicked.connect(self._reset_state)
 
         top_row.addWidget(self.file_label, 1)
-        top_row.addWidget(self.open_button)
         top_row.addWidget(self.record_button)
         top_row.addWidget(self.play_button)
         top_row.addWidget(self.reset_button)
+
+        supported_formats = ", ".join(extension.upper() for extension in SUPPORTED_INPUT_FORMATS)
+        self.audio_file_card = FileDropCard(
+            accepted_type_text="audio files",
+            multi_file=False,
+        )
+        self.audio_file_card.clicked.connect(self._choose_audio_file)
+        self.audio_file_card.paths_dropped.connect(self._handle_audio_file_drop)
+        self.audio_file_card.set_empty_state(
+            title="Click to select or drop an audio file",
+            subtitle=f"Supported: {supported_formats}",
+            caption="Accepts: audio files | Single file",
+        )
 
         self.playback_hint_label = QLabel(
             "Preview: load audio to hear the current result."
@@ -220,6 +229,7 @@ class AudioToolsWidget(QWidget):
         export_layout.addWidget(self.status_label)
 
         layout.addLayout(top_row)
+        layout.addWidget(self.audio_file_card)
         layout.addWidget(self.playback_hint_label)
         layout.addLayout(mode_row)
         layout.addWidget(self.waveform, 1)
@@ -422,6 +432,13 @@ class AudioToolsWidget(QWidget):
         if file_name:
             self._load_audio_file(Path(file_name))
 
+    def _handle_audio_file_drop(self, paths: list[Path]) -> None:
+        for path in paths:
+            if path.suffix.lower().lstrip(".") in SUPPORTED_INPUT_FORMATS:
+                self._load_audio_file(path)
+                return
+        self._set_status("Drop a supported audio file to load it.", "error")
+
     def _toggle_recording(self) -> None:
         if self.media_recorder is not None and self.is_recording:
             self._stop_recording()
@@ -511,6 +528,11 @@ class AudioToolsWidget(QWidget):
         self.audio_file = audio_file
         self.state.reset(audio_file.editor_duration_seconds)
         self.file_label.setText(audio_file.display_name)
+        self.audio_file_card.set_loaded_state(
+            title=audio_file.display_name,
+            subtitle=f"{audio_file.editor_duration_seconds:.2f}s ready to edit",
+            caption="Click or drop another audio file to replace.",
+        )
         self.waveform.set_audio(
             audio_file.display_name,
             audio_file.waveform_points,
@@ -1058,7 +1080,7 @@ class AudioToolsWidget(QWidget):
     def _refresh_control_state(self) -> None:
         controls_enabled = not self.is_busy and not self.is_recording and not self.is_finishing_recording
         has_audio = self.audio_file is not None
-        self.open_button.setEnabled(not self.is_busy and not self.is_recording)
+        self.audio_file_card.setEnabled(not self.is_busy and not self.is_recording)
         self.record_button.setEnabled(not self.is_busy and not self.is_finishing_recording)
         self.record_button.setText(
             "Stopping..."
@@ -1178,6 +1200,12 @@ class AudioToolsWidget(QWidget):
         self.audio_file = None
         self.state = AudioEditState(output_format="mp3")
         self.file_label.setText("No audio loaded")
+        supported_formats = ", ".join(extension.upper() for extension in SUPPORTED_INPUT_FORMATS)
+        self.audio_file_card.set_empty_state(
+            title="Click to select or drop an audio file",
+            subtitle=f"Supported: {supported_formats}",
+            caption="Accepts: audio files | Single file",
+        )
         self.waveform.clear_audio()
         self._set_mode(DEFAULT_EDITOR_MODE)
         self._update_editor_ui()

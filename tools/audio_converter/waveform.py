@@ -145,14 +145,14 @@ class AudioWaveformWidget(QWidget):
     def _draw_empty_state(self, painter: QPainter, rect: QRectF) -> None:
         painter.setPen(QColor("#F8FAFC"))
         title_rect = QRectF(rect.left(), rect.center().y() - 26, rect.width(), 24)
-        painter.drawText(title_rect, Qt.AlignmentFlag.AlignCenter, "Open audio file")
+        painter.drawText(title_rect, Qt.AlignmentFlag.AlignCenter, "Waveform preview")
 
         painter.setPen(QColor("#94A3B8"))
         subtitle_rect = QRectF(rect.left(), rect.center().y() + 4, rect.width(), 20)
         painter.drawText(
             subtitle_rect,
             Qt.AlignmentFlag.AlignCenter,
-            "Drop file here or use Open Audio",
+            "Use the file card above or drop audio here",
         )
 
     def _draw_selection_overlay(self, painter: QPainter, rect: QRectF) -> None:

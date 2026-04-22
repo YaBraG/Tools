@@ -348,29 +348,29 @@ QFrame#pdfOutputPanel {
     border-radius: 18px;
 }
 
-QFrame#splitDropZone {
+QFrame#fileDropCard {
     background: #0B1220;
     border: 2px dashed #334155;
     border-radius: 18px;
 }
 
-QFrame#splitDropZone[dropActive="true"] {
+QFrame#fileDropCard[dropActive="true"] {
     background: #111D35;
     border-color: #3B82F6;
 }
 
-QFrame#splitDropZone:hover {
+QFrame#fileDropCard:hover {
     border-color: #60A5FA;
     background: #0F172A;
 }
 
-QLabel#splitDropZoneTitle {
+QLabel#fileDropCardTitle {
     color: #F8FAFC;
     font-size: 16px;
     font-weight: 700;
 }
 
-QLabel#splitDropZoneMeta {
+QLabel#fileDropCardMeta {
     color: #93C5FD;
     font-size: 13px;
     font-weight: 600;
