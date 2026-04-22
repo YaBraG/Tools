@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -25,10 +26,15 @@ from PySide6.QtWidgets import (
 
 from shared.tool_base import ToolContext
 from tools.pdf_tools.models import (
+    PDF_ACTION_MERGE,
+    PDF_ACTION_SPLIT,
     ORDER_MODE_PAGE,
     ORDER_MODE_PDF,
     PdfMergeItem,
     PdfMergeState,
+    PdfSplitState,
+    SPLIT_MODE_CUSTOM,
+    SPLIT_MODE_EVERY_PAGE,
 )
 from tools.pdf_tools.service import PdfMergeError, PdfMergeService
 
@@ -38,7 +44,9 @@ class PdfToolsWidget(QWidget):
         super().__init__(parent)
         self.context = context
         self.service = PdfMergeService(context)
-        self.state = PdfMergeState()
+        self.merge_state = PdfMergeState()
+        self.split_state = PdfSplitState()
+        self.active_action = PDF_ACTION_MERGE
 
         self._build_ui()
         self._refresh_ui()
@@ -67,17 +75,22 @@ class PdfToolsWidget(QWidget):
 
         action_row = QHBoxLayout()
         action_row.setSpacing(10)
-        for label, enabled in (
-            ("Merge", True),
-            ("Split", False),
-            ("Compress", False),
-            ("Convert", False),
+        self.action_buttons: dict[str, QPushButton] = {}
+        for action_key, label, enabled in (
+            (PDF_ACTION_MERGE, "Merge", True),
+            (PDF_ACTION_SPLIT, "Split", True),
+            ("compress", "Compress", False),
+            ("convert", "Convert", False),
         ):
             button = QPushButton(label)
             button.setObjectName("modeTab")
             button.setCheckable(True)
-            button.setChecked(enabled)
             button.setEnabled(enabled)
+            if action_key in (PDF_ACTION_MERGE, PDF_ACTION_SPLIT):
+                button.clicked.connect(
+                    lambda checked=False, action=action_key: self._set_active_action(action)
+                )
+                self.action_buttons[action_key] = button
             action_row.addWidget(button)
         action_row.addStretch(1)
 
@@ -86,7 +99,15 @@ class PdfToolsWidget(QWidget):
         header_layout.addLayout(action_row)
         layout.addWidget(header_panel)
 
-        body = QHBoxLayout()
+        self.action_stack = QStackedWidget()
+        self.action_stack.addWidget(self._build_merge_workspace())
+        self.action_stack.addWidget(self._build_split_workspace())
+        layout.addWidget(self.action_stack, 1)
+
+    def _build_merge_workspace(self) -> QWidget:
+        page = QWidget()
+        body = QHBoxLayout(page)
+        body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(16)
 
         left_panel = QFrame()
@@ -269,8 +290,146 @@ class PdfToolsWidget(QWidget):
         right_layout.addLayout(page_move_row)
         right_layout.addWidget(output_panel)
         body.addWidget(right_panel, 1)
+        return page
 
-        layout.addLayout(body, 1)
+    def _build_split_workspace(self) -> QWidget:
+        page = QWidget()
+        layout = QHBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
+
+        source_panel = QFrame()
+        source_panel.setObjectName("workspacePanel")
+        source_layout = QVBoxLayout(source_panel)
+        source_layout.setContentsMargins(18, 18, 18, 18)
+        source_layout.setSpacing(12)
+
+        source_title = QLabel("Split source")
+        source_title.setObjectName("panelTitle")
+
+        source_subtitle = QLabel(
+            "Choose one PDF, pick split mode, then write new PDFs into output folder. Source file stays untouched."
+        )
+        source_subtitle.setObjectName("panelBody")
+        source_subtitle.setWordWrap(True)
+
+        source_button_row = QHBoxLayout()
+        source_button_row.setSpacing(10)
+
+        self.split_open_button = QPushButton("Open PDF")
+        self.split_open_button.setObjectName("secondaryButton")
+        self.split_open_button.clicked.connect(self._choose_split_pdf)
+
+        source_button_row.addWidget(self.split_open_button)
+        source_button_row.addStretch(1)
+
+        self.split_file_label = QLabel("No PDF selected")
+        self.split_file_label.setObjectName("workspaceTitle")
+
+        self.split_path_label = QLabel("Source path: -")
+        self.split_path_label.setObjectName("panelBody")
+        self.split_path_label.setWordWrap(True)
+
+        self.split_page_count_label = QLabel("Page count: -")
+        self.split_page_count_label.setObjectName("mutedLabel")
+
+        source_layout.addWidget(source_title)
+        source_layout.addWidget(source_subtitle)
+        source_layout.addLayout(source_button_row)
+        source_layout.addWidget(self.split_file_label)
+        source_layout.addWidget(self.split_path_label)
+        source_layout.addWidget(self.split_page_count_label)
+        source_layout.addStretch(1)
+        layout.addWidget(source_panel, 1)
+
+        split_panel = QFrame()
+        split_panel.setObjectName("workspacePanel")
+        split_layout = QVBoxLayout(split_panel)
+        split_layout.setContentsMargins(18, 18, 18, 18)
+        split_layout.setSpacing(12)
+
+        split_title = QLabel("Split options")
+        split_title.setObjectName("panelTitle")
+
+        split_hint = QLabel(
+            "Split writes new PDFs by importing original pages directly. No rasterization. Existing output files fail safely."
+        )
+        split_hint.setObjectName("panelBody")
+        split_hint.setWordWrap(True)
+
+        self.split_every_button = QPushButton("Every Page")
+        self.split_every_button.setObjectName("modeTab")
+        self.split_every_button.setCheckable(True)
+        self.split_every_button.clicked.connect(
+            lambda checked=False: self._set_split_mode(SPLIT_MODE_EVERY_PAGE)
+        )
+
+        self.split_custom_button = QPushButton("Custom Ranges")
+        self.split_custom_button.setObjectName("modeTab")
+        self.split_custom_button.setCheckable(True)
+        self.split_custom_button.clicked.connect(
+            lambda checked=False: self._set_split_mode(SPLIT_MODE_CUSTOM)
+        )
+
+        split_mode_row = QHBoxLayout()
+        split_mode_row.setSpacing(10)
+        split_mode_row.addWidget(self.split_every_button)
+        split_mode_row.addWidget(self.split_custom_button)
+        split_mode_row.addStretch(1)
+
+        split_output_label = QLabel("Output folder")
+        split_output_label.setObjectName("mutedLabel")
+
+        split_output_row = QHBoxLayout()
+        split_output_row.setSpacing(10)
+
+        self.split_output_dir_edit = QLineEdit()
+        self.split_output_dir_edit.setObjectName("workspaceInput")
+        self.split_output_dir_edit.setPlaceholderText("Choose output folder")
+        self.split_output_dir_edit.textChanged.connect(self._on_split_output_dir_changed)
+
+        self.split_output_browse_button = QPushButton("Browse")
+        self.split_output_browse_button.setObjectName("secondaryButton")
+        self.split_output_browse_button.clicked.connect(self._choose_split_output_dir)
+
+        split_output_row.addWidget(self.split_output_dir_edit, 1)
+        split_output_row.addWidget(self.split_output_browse_button)
+
+        self.split_ranges_label = QLabel("Custom page ranges")
+        self.split_ranges_label.setObjectName("mutedLabel")
+
+        self.split_ranges_edit = QLineEdit()
+        self.split_ranges_edit.setObjectName("workspaceInput")
+        self.split_ranges_edit.setPlaceholderText("Examples: 1-3,5,8-10")
+        self.split_ranges_edit.textChanged.connect(self._on_split_ranges_changed)
+
+        self.split_ranges_hint = QLabel(
+            "Ranges use 1-based pages. Examples: 1-3 | 1-3,5 | 1-3,5,8-10"
+        )
+        self.split_ranges_hint.setObjectName("mutedLabel")
+        self.split_ranges_hint.setWordWrap(True)
+
+        self.split_button = QPushButton("Split PDF")
+        self.split_button.setObjectName("primaryButton")
+        self.split_button.clicked.connect(self._split_pdf)
+
+        self.split_status_label = QLabel("Status: choose one PDF to split.")
+        self.split_status_label.setObjectName("statusLabel")
+        self.split_status_label.setWordWrap(True)
+
+        split_layout.addWidget(split_title)
+        split_layout.addWidget(split_hint)
+        split_layout.addLayout(split_mode_row)
+        split_layout.addWidget(split_output_label)
+        split_layout.addLayout(split_output_row)
+        split_layout.addWidget(self.split_ranges_label)
+        split_layout.addWidget(self.split_ranges_edit)
+        split_layout.addWidget(self.split_ranges_hint)
+        split_layout.addWidget(self.split_button)
+        split_layout.addWidget(self.split_status_label)
+        split_layout.addStretch(1)
+        layout.addWidget(split_panel, 1)
+        return page
 
     def _choose_pdf_files(self) -> None:
         file_names, _ = QFileDialog.getOpenFileNames(
@@ -285,7 +444,7 @@ class PdfToolsWidget(QWidget):
     def _add_pdf_paths(self, paths: list[Path]) -> None:
         added = 0
         skipped: list[str] = []
-        known_paths = {item.source_path for item in self.state.items}
+        known_paths = {item.source_path for item in self.merge_state.items}
 
         for path in paths:
             try:
@@ -301,21 +460,21 @@ class PdfToolsWidget(QWidget):
                 skipped.append(str(error))
                 continue
 
-            self.state.add_item(item)
+            self.merge_state.add_item(item)
             known_paths.add(item.source_path)
             added += 1
 
-        if added and self.state.output_path is None:
-            suggested = self.service.suggested_output_path(self.state.items)
+        if added and self.merge_state.output_path is None:
+            suggested = self.service.suggested_output_path(self.merge_state.items)
             if suggested is not None:
-                self.state.output_path = suggested
+                self.merge_state.output_path = suggested
 
         self._refresh_ui()
         status_parts: list[str] = []
         status_kind = "info"
         if added:
             status_parts.append(
-                f"Loaded {added} PDF file(s). Queue now has {len(self.state.items)} document(s)."
+                f"Loaded {added} PDF file(s). Queue now has {len(self.merge_state.items)} document(s)."
             )
             status_kind = "success"
         if skipped:
@@ -330,9 +489,9 @@ class PdfToolsWidget(QWidget):
         if row < 0:
             self._set_status("Select PDF in queue first.", "error")
             return
-        removed = self.state.remove_item_at(row)
-        if not self.state.items:
-            self.state.output_path = None
+        removed = self.merge_state.remove_item_at(row)
+        if not self.merge_state.items:
+            self.merge_state.output_path = None
         self._refresh_ui()
         self._set_status(f"Removed {removed.display_name} from merge queue.")
 
@@ -342,21 +501,122 @@ class PdfToolsWidget(QWidget):
             self._set_status("Select PDF in queue first.", "error")
             return
         target_row = row + delta
-        if not self.state.move_item(row, target_row):
+        if not self.merge_state.move_item(row, target_row):
             return
         self._refresh_ui(selected_row=target_row)
         self._set_status("PDF order updated.", "success")
 
     def _set_order_mode(self, mode: str) -> None:
-        self.state.order_mode = mode
+        self.merge_state.order_mode = mode
         self._refresh_mode_buttons()
         self._refresh_page_table()
         self._refresh_page_move_buttons()
 
+    def _set_active_action(self, action: str) -> None:
+        self.active_action = action
+        self._refresh_action_buttons()
+
+    def _choose_split_pdf(self) -> None:
+        file_name, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select PDF to split",
+            "",
+            "PDF files (*.pdf);;All files (*.*)",
+        )
+        if not file_name:
+            return
+
+        try:
+            item = self.service.inspect_pdf(Path(file_name), document_id=uuid4().hex)
+        except PdfMergeError as error:
+            self._set_split_status(str(error), "error")
+            return
+
+        self.split_state.source_item = item
+        if self.split_state.output_dir is None:
+            suggested_dir = self.service.suggested_split_output_dir(item)
+            if suggested_dir is not None:
+                self.split_state.output_dir = suggested_dir
+        self._refresh_split_workspace()
+        self._set_split_status(f"Loaded {item.display_name} for split.", "success")
+
+    def _choose_split_output_dir(self) -> None:
+        selected_dir = QFileDialog.getExistingDirectory(
+            self,
+            "Choose split output folder",
+            self.split_output_dir_edit.text().strip(),
+        )
+        if not selected_dir:
+            return
+        with QSignalBlocker(self.split_output_dir_edit):
+            self.split_output_dir_edit.setText(selected_dir)
+        self.split_state.output_dir = Path(selected_dir)
+        self._refresh_split_button()
+
+    def _on_split_output_dir_changed(self, text: str) -> None:
+        cleaned = text.strip()
+        self.split_state.output_dir = Path(cleaned) if cleaned else None
+        self._refresh_split_button()
+
+    def _on_split_ranges_changed(self, text: str) -> None:
+        self.split_state.custom_ranges_text = text
+        self._refresh_split_button()
+
+    def _set_split_mode(self, mode: str) -> None:
+        self.split_state.split_mode = mode
+        self._refresh_split_mode_buttons()
+        self._refresh_split_button()
+
+    def _split_pdf(self) -> None:
+        source_item = self.split_state.source_item
+        if source_item is None:
+            self._set_split_status("Choose one PDF to split first.", "error")
+            return
+        if self.split_state.output_dir is None:
+            self._set_split_status("Choose output folder first.", "error")
+            return
+
+        try:
+            if self.split_state.split_mode == SPLIT_MODE_EVERY_PAGE:
+                output_paths = self.service.split_every_page(
+                    source_item,
+                    self.split_state.output_dir,
+                )
+            else:
+                ranges = self.service.parse_page_ranges(
+                    self.split_state.custom_ranges_text,
+                    page_count=source_item.page_count,
+                )
+                output_paths = self.service.split_by_ranges(
+                    source_item,
+                    self.split_state.output_dir,
+                    ranges,
+                )
+        except PdfMergeError as error:
+            self._set_split_status(str(error), "error")
+            return
+
+        self.split_state.last_output_paths = output_paths
+        self._set_split_status(
+            f"Created {len(output_paths)} split PDF(s) in {self.split_state.output_dir}",
+            "success",
+        )
+        response = QMessageBox.question(
+            self,
+            "Split complete",
+            f"Created {len(output_paths)} PDF file(s) in:\n{self.split_state.output_dir}\n\nOpen containing folder?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if response == QMessageBox.StandardButton.Yes:
+            QDesktopServices.openUrl(
+                QUrl.fromLocalFile(str(self.split_state.output_dir))
+            )
+
     def _choose_output_path(self) -> None:
         suggested = self.output_path_edit.text().strip()
-        if not suggested and self.state.items:
-            fallback = self.service.suggested_output_path(self.state.items)
+        if not suggested and self.merge_state.items:
+            fallback = self.service.suggested_output_path(self.merge_state.items)
             suggested = str(fallback) if fallback is not None else ""
 
         selected_path, _ = QFileDialog.getSaveFileName(
@@ -373,35 +633,35 @@ class PdfToolsWidget(QWidget):
 
         with QSignalBlocker(self.output_path_edit):
             self.output_path_edit.setText(str(normalized_path))
-        self.state.output_path = normalized_path
+        self.merge_state.output_path = normalized_path
         self._refresh_merge_button()
 
     def _on_output_path_changed(self, text: str) -> None:
         cleaned = text.strip()
-        self.state.output_path = Path(cleaned) if cleaned else None
+        self.merge_state.output_path = Path(cleaned) if cleaned else None
         self._refresh_merge_button()
 
     def _merge_pdfs(self) -> None:
-        if self.state.output_path is None:
+        if self.merge_state.output_path is None:
             self._set_status("Choose output PDF path first.", "error")
             return
         try:
-            if self.state.order_mode == ORDER_MODE_PAGE:
+            if self.merge_state.order_mode == ORDER_MODE_PAGE:
                 output_path = self.service.merge_page_sequence(
-                    self.state.pages,
-                    self.state.output_path,
+                    self.merge_state.pages,
+                    self.merge_state.output_path,
                 )
             else:
                 output_path = self.service.merge_pdfs(
-                    self.state.items,
-                    self.state.output_path,
+                    self.merge_state.items,
+                    self.merge_state.output_path,
                 )
         except PdfMergeError as error:
             self._set_status(str(error), "error")
             return
 
-        self.state.last_output_path = output_path
-        self._set_status(f"Merged {len(self.state.items)} PDF(s) into {output_path}", "success")
+        self.merge_state.last_output_path = output_path
+        self._set_status(f"Merged {len(self.merge_state.items)} PDF(s) into {output_path}", "success")
         response = QMessageBox.question(
             self,
             "Merge complete",
@@ -413,16 +673,18 @@ class PdfToolsWidget(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_path.parent)))
 
     def _refresh_ui(self, *, selected_row: int | None = None) -> None:
+        self._refresh_action_buttons()
         self._refresh_pdf_list(selected_row=selected_row)
         self._refresh_mode_buttons()
         self._refresh_page_table()
         self._refresh_output_path()
         self._refresh_merge_button()
         self._refresh_page_move_buttons()
+        self._refresh_split_workspace()
 
     def _refresh_pdf_list(self, *, selected_row: int | None = None) -> None:
         self.pdf_list.clear()
-        for index, item in enumerate(self.state.items, start=1):
+        for index, item in enumerate(self.merge_state.items, start=1):
             list_item = QListWidgetItem()
             list_item.setToolTip(str(item.source_path))
             widget = self._build_pdf_item_widget(index, item)
@@ -430,16 +692,16 @@ class PdfToolsWidget(QWidget):
             self.pdf_list.addItem(list_item)
             self.pdf_list.setItemWidget(list_item, widget)
 
-        if selected_row is None and self.state.items:
-            selected_row = min(self.pdf_list.currentRow(), len(self.state.items) - 1)
+        if selected_row is None and self.merge_state.items:
+            selected_row = min(self.pdf_list.currentRow(), len(self.merge_state.items) - 1)
             if selected_row < 0:
                 selected_row = 0
 
         if selected_row is not None and 0 <= selected_row < self.pdf_list.count():
             self.pdf_list.setCurrentRow(selected_row)
 
-        document_count = len(self.state.items)
-        total_pages = self.state.total_pages
+        document_count = len(self.merge_state.items)
+        total_pages = self.merge_state.total_pages
         if document_count == 0:
             self.queue_summary_label.setText("No PDFs selected.")
         else:
@@ -482,13 +744,13 @@ class PdfToolsWidget(QWidget):
         self.remove_button.setEnabled(has_selection)
         self.move_up_button.setEnabled(has_selection and row > 0)
         self.move_down_button.setEnabled(
-            has_selection and 0 <= row < len(self.state.items) - 1
+            has_selection and 0 <= row < len(self.merge_state.items) - 1
         )
 
     def _refresh_mode_buttons(self) -> None:
-        self.pdf_mode_button.setChecked(self.state.order_mode == ORDER_MODE_PDF)
-        self.page_mode_button.setChecked(self.state.order_mode == ORDER_MODE_PAGE)
-        if self.state.order_mode == ORDER_MODE_PAGE:
+        self.pdf_mode_button.setChecked(self.merge_state.order_mode == ORDER_MODE_PDF)
+        self.page_mode_button.setChecked(self.merge_state.order_mode == ORDER_MODE_PAGE)
+        if self.merge_state.order_mode == ORDER_MODE_PAGE:
             self.mode_summary_label.setText(
                 "Page order mode controls actual merged output. Select page row, move up/down, interleave pages from any source PDF."
             )
@@ -501,7 +763,7 @@ class PdfToolsWidget(QWidget):
 
     def _refresh_page_table(self) -> None:
         selected_row = self._selected_page_row()
-        pages = self.state.pages
+        pages = self.merge_state.pages
         self.page_table.setRowCount(len(pages))
         for row, page in enumerate(pages):
             values = (
@@ -514,17 +776,17 @@ class PdfToolsWidget(QWidget):
                 item = QTableWidgetItem(value)
                 item.setToolTip(str(page.source_path))
                 self.page_table.setItem(row, column, item)
-        self.page_table.setColumnHidden(3, self.state.order_mode != ORDER_MODE_PAGE)
+        self.page_table.setColumnHidden(3, self.merge_state.order_mode != ORDER_MODE_PAGE)
         if 0 <= selected_row < len(pages):
             self.page_table.selectRow(selected_row)
         elif len(pages) > 0:
-            if self.state.order_mode == ORDER_MODE_PAGE:
+            if self.merge_state.order_mode == ORDER_MODE_PAGE:
                 self.page_table.selectRow(0)
             else:
                 self.page_table.clearSelection()
 
     def _move_selected_page(self, delta: int) -> None:
-        if self.state.order_mode != ORDER_MODE_PAGE:
+        if self.merge_state.order_mode != ORDER_MODE_PAGE:
             self._set_status("Switch to Page Order mode to move individual pages.", "error")
             return
 
@@ -534,7 +796,7 @@ class PdfToolsWidget(QWidget):
             return
 
         target_row = row + delta
-        if not self.state.move_page(row, target_row):
+        if not self.merge_state.move_page(row, target_row):
             return
 
         self._refresh_page_table()
@@ -545,12 +807,12 @@ class PdfToolsWidget(QWidget):
     def _refresh_output_path(self) -> None:
         current_text = self.output_path_edit.text().strip()
         desired_text = ""
-        if self.state.output_path is not None:
-            desired_text = str(self.state.output_path)
-        elif not current_text and self.state.items:
-            suggested = self.service.suggested_output_path(self.state.items)
+        if self.merge_state.output_path is not None:
+            desired_text = str(self.merge_state.output_path)
+        elif not current_text and self.merge_state.items:
+            suggested = self.service.suggested_output_path(self.merge_state.items)
             if suggested is not None:
-                self.state.output_path = suggested
+                self.merge_state.output_path = suggested
                 desired_text = str(suggested)
 
         if desired_text != current_text:
@@ -558,18 +820,80 @@ class PdfToolsWidget(QWidget):
                 self.output_path_edit.setText(desired_text)
 
     def _refresh_merge_button(self) -> None:
-        self.merge_button.setEnabled(bool(self.state.items) and self.state.output_path is not None)
+        self.merge_button.setEnabled(
+            bool(self.merge_state.items) and self.merge_state.output_path is not None
+        )
 
     def _refresh_page_move_buttons(self) -> None:
         selected_row = self._selected_page_row()
-        page_mode_active = self.state.order_mode == ORDER_MODE_PAGE
-        has_selection = 0 <= selected_row < len(self.state.pages)
+        page_mode_active = self.merge_state.order_mode == ORDER_MODE_PAGE
+        has_selection = 0 <= selected_row < len(self.merge_state.pages)
         self.page_move_up_button.setEnabled(page_mode_active and has_selection and selected_row > 0)
         self.page_move_down_button.setEnabled(
             page_mode_active
             and has_selection
-            and selected_row < len(self.state.pages) - 1
+            and selected_row < len(self.merge_state.pages) - 1
         )
+
+    def _refresh_action_buttons(self) -> None:
+        self.action_buttons[PDF_ACTION_MERGE].setChecked(
+            self.active_action == PDF_ACTION_MERGE
+        )
+        self.action_buttons[PDF_ACTION_SPLIT].setChecked(
+            self.active_action == PDF_ACTION_SPLIT
+        )
+        self.action_stack.setCurrentIndex(
+            0 if self.active_action == PDF_ACTION_MERGE else 1
+        )
+
+    def _refresh_split_workspace(self) -> None:
+        source_item = self.split_state.source_item
+        if source_item is None:
+            self.split_file_label.setText("No PDF selected")
+            self.split_path_label.setText("Source path: -")
+            self.split_page_count_label.setText("Page count: -")
+        else:
+            self.split_file_label.setText(source_item.display_name)
+            self.split_path_label.setText(f"Source path: {source_item.source_path}")
+            self.split_page_count_label.setText(f"Page count: {source_item.page_count}")
+
+        desired_output_dir = ""
+        if self.split_state.output_dir is not None:
+            desired_output_dir = str(self.split_state.output_dir)
+        elif source_item is not None:
+            suggested_dir = self.service.suggested_split_output_dir(source_item)
+            if suggested_dir is not None:
+                self.split_state.output_dir = suggested_dir
+                desired_output_dir = str(suggested_dir)
+
+        current_output_dir = self.split_output_dir_edit.text().strip()
+        if current_output_dir != desired_output_dir:
+            with QSignalBlocker(self.split_output_dir_edit):
+                self.split_output_dir_edit.setText(desired_output_dir)
+
+        if self.split_ranges_edit.text() != self.split_state.custom_ranges_text:
+            with QSignalBlocker(self.split_ranges_edit):
+                self.split_ranges_edit.setText(self.split_state.custom_ranges_text)
+
+        self._refresh_split_mode_buttons()
+        self._refresh_split_button()
+
+    def _refresh_split_mode_buttons(self) -> None:
+        is_every_page = self.split_state.split_mode == SPLIT_MODE_EVERY_PAGE
+        self.split_every_button.setChecked(is_every_page)
+        self.split_custom_button.setChecked(not is_every_page)
+        self.split_ranges_label.setVisible(not is_every_page)
+        self.split_ranges_edit.setVisible(not is_every_page)
+        self.split_ranges_hint.setVisible(not is_every_page)
+
+    def _refresh_split_button(self) -> None:
+        has_source = self.split_state.source_item is not None
+        has_output_dir = self.split_state.output_dir is not None
+        if self.split_state.split_mode == SPLIT_MODE_CUSTOM:
+            has_ranges = bool(self.split_state.custom_ranges_text.strip())
+        else:
+            has_ranges = True
+        self.split_button.setEnabled(has_source and has_output_dir and has_ranges)
 
     def _selected_page_row(self) -> int:
         selection_model = self.page_table.selectionModel()
@@ -589,6 +913,16 @@ class PdfToolsWidget(QWidget):
         self.status_label.setText(message)
         self.status_label.style().unpolish(self.status_label)
         self.status_label.style().polish(self.status_label)
+
+    def _set_split_status(self, message: str, kind: str = "info") -> None:
+        object_name = {
+            "success": "successLabel",
+            "error": "errorLabel",
+        }.get(kind, "statusLabel")
+        self.split_status_label.setObjectName(object_name)
+        self.split_status_label.setText(message)
+        self.split_status_label.style().unpolish(self.split_status_label)
+        self.split_status_label.style().polish(self.split_status_label)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasUrls():

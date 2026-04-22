@@ -6,7 +6,7 @@ from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 
 from shared.tool_base import ToolContext
-from tools.pdf_tools.models import PdfMergeItem, PdfPageItem
+from tools.pdf_tools.models import PdfMergeItem, PdfPageItem, PdfPageRange
 
 
 class PdfMergeError(ValueError):
@@ -107,12 +107,142 @@ class PdfMergeService:
 
         return normalized_output
 
+    def parse_page_ranges(
+        self,
+        ranges_text: str,
+        *,
+        page_count: int,
+    ) -> list[PdfPageRange]:
+        cleaned = ranges_text.strip()
+        if not cleaned:
+            raise PdfMergeError("Enter at least one page range.")
+
+        ranges: list[PdfPageRange] = []
+        seen_pages: set[int] = set()
+        for token in cleaned.split(","):
+            part = token.strip()
+            if not part:
+                raise PdfMergeError("Page ranges contain an empty segment.")
+
+            if "-" in part:
+                start_text, end_text = [piece.strip() for piece in part.split("-", 1)]
+                if not start_text or not end_text:
+                    raise PdfMergeError(f"Invalid page range: {part}")
+                if not start_text.isdigit() or not end_text.isdigit():
+                    raise PdfMergeError(f"Invalid page range: {part}")
+                start_page = int(start_text)
+                end_page = int(end_text)
+                if start_page == 0 or end_page == 0:
+                    raise PdfMergeError("Page numbers start at 1.")
+                if start_page > end_page:
+                    raise PdfMergeError(f"Range start must be before end: {part}")
+            else:
+                if not part.isdigit():
+                    raise PdfMergeError(f"Invalid page value: {part}")
+                start_page = int(part)
+                end_page = start_page
+                if start_page == 0:
+                    raise PdfMergeError("Page numbers start at 1.")
+
+            if end_page > page_count:
+                raise PdfMergeError(
+                    f"Page range {part} exceeds source page count of {page_count}."
+                )
+
+            page_range = PdfPageRange(start_page=start_page, end_page=end_page)
+            duplicates = seen_pages.intersection(page_range.page_numbers)
+            if duplicates:
+                duplicate_list = ", ".join(str(page) for page in sorted(duplicates))
+                raise PdfMergeError(
+                    f"Page ranges overlap or repeat pages: {duplicate_list}"
+                )
+
+            seen_pages.update(page_range.page_numbers)
+            ranges.append(page_range)
+
+        return ranges
+
+    def split_every_page(
+        self,
+        source_item: PdfMergeItem,
+        output_dir: Path,
+    ) -> tuple[Path, ...]:
+        ranges = [
+            PdfPageRange(start_page=page_number, end_page=page_number)
+            for page_number in range(1, source_item.page_count + 1)
+        ]
+        return self.split_by_ranges(source_item, output_dir, ranges)
+
+    def split_by_ranges(
+        self,
+        source_item: PdfMergeItem,
+        output_dir: Path,
+        ranges: list[PdfPageRange],
+    ) -> tuple[Path, ...]:
+        if not ranges:
+            raise PdfMergeError("Add at least one page range before split.")
+
+        resolved_path = self._validate_source_path(source_item.source_path)
+        resolved_output_dir = self._validate_output_dir(output_dir)
+        file_padding = max(3, len(str(source_item.page_count)))
+
+        planned_outputs = [
+            resolved_output_dir / self._split_output_name(
+                resolved_path.stem,
+                page_range,
+                file_padding=file_padding,
+            )
+            for page_range in ranges
+        ]
+        duplicates = {
+            path.name for path in planned_outputs if planned_outputs.count(path) > 1
+        }
+        if duplicates:
+            duplicate_text = ", ".join(sorted(duplicates))
+            raise PdfMergeError(f"Split output names would collide: {duplicate_text}")
+        for output_path in planned_outputs:
+            if output_path.exists():
+                raise PdfMergeError(
+                    f"Split output already exists: {output_path}"
+                )
+
+        handle = resolved_path.open("rb")
+        try:
+            reader = PdfReader(handle)
+            if len(reader.pages) != source_item.page_count:
+                raise PdfMergeError(
+                    f"Source PDF changed since load: {resolved_path.name}"
+                )
+
+            written_paths: list[Path] = []
+            for page_range, output_path in zip(ranges, planned_outputs, strict=True):
+                writer = PdfWriter()
+                for page_number in page_range.page_numbers:
+                    writer.add_page(reader.pages[page_number - 1])
+                with output_path.open("wb") as output_file:
+                    writer.write(output_file)
+                written_paths.append(output_path)
+        except (OSError, PdfReadError) as error:
+            raise PdfMergeError(
+                f"Split failed for source PDF: {resolved_path.name}"
+            ) from error
+        finally:
+            handle.close()
+
+        return tuple(written_paths)
+
     @staticmethod
     def suggested_output_path(items: list[PdfMergeItem]) -> Path | None:
         if not items:
             return None
         first_path = items[0].source_path
         return first_path.with_name(f"{first_path.stem}-merged.pdf")
+
+    @staticmethod
+    def suggested_split_output_dir(source_item: PdfMergeItem | None) -> Path | None:
+        if source_item is None:
+            return None
+        return source_item.source_path.parent
 
     @staticmethod
     def _validate_source_path(source_path: Path) -> Path:
@@ -136,3 +266,31 @@ class PdfMergeService:
                 f"Output folder does not exist: {normalized_output.parent}"
             )
         return normalized_output
+
+    @staticmethod
+    def _validate_output_dir(output_dir: Path) -> Path:
+        normalized_output_dir = output_dir.expanduser()
+        if not normalized_output_dir.exists():
+            raise PdfMergeError(
+                f"Output folder does not exist: {normalized_output_dir}"
+            )
+        if not normalized_output_dir.is_dir():
+            raise PdfMergeError(
+                f"Output path is not a folder: {normalized_output_dir}"
+            )
+        return normalized_output_dir.resolve()
+
+    @staticmethod
+    def _split_output_name(
+        source_stem: str,
+        page_range: PdfPageRange,
+        *,
+        file_padding: int,
+    ) -> str:
+        if page_range.start_page == page_range.end_page:
+            page_text = f"{page_range.start_page:0{file_padding}d}"
+            return f"{source_stem}-page-{page_text}.pdf"
+
+        start_text = f"{page_range.start_page:0{file_padding}d}"
+        end_text = f"{page_range.end_page:0{file_padding}d}"
+        return f"{source_stem}-pages-{start_text}-{end_text}.pdf"

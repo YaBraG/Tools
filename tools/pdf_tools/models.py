@@ -6,6 +6,10 @@ from pathlib import Path
 ORDER_MODE_PDF = "pdf"
 ORDER_MODE_PAGE = "page"
 ORDER_MODES = (ORDER_MODE_PDF, ORDER_MODE_PAGE)
+PDF_ACTION_MERGE = "merge"
+PDF_ACTION_SPLIT = "split"
+SPLIT_MODE_EVERY_PAGE = "every_page"
+SPLIT_MODE_CUSTOM = "custom"
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,22 @@ class PdfPageItem:
     @property
     def original_page_number(self) -> int:
         return self.original_page_index + 1
+
+
+@dataclass(frozen=True)
+class PdfPageRange:
+    start_page: int
+    end_page: int
+
+    @property
+    def label(self) -> str:
+        if self.start_page == self.end_page:
+            return f"{self.start_page}"
+        return f"{self.start_page}-{self.end_page}"
+
+    @property
+    def page_numbers(self) -> tuple[int, ...]:
+        return tuple(range(self.start_page, self.end_page + 1))
 
 
 @dataclass
@@ -111,3 +131,12 @@ class PdfMergeState:
             )
             for index, page in enumerate(self.pages, start=1)
         ]
+
+
+@dataclass
+class PdfSplitState:
+    source_item: PdfMergeItem | None = None
+    output_dir: Path | None = None
+    split_mode: str = SPLIT_MODE_EVERY_PAGE
+    custom_ranges_text: str = ""
+    last_output_paths: tuple[Path, ...] = ()
