@@ -204,7 +204,7 @@ class PdfToolsWidget(QWidget):
         self.mode_summary_label.setWordWrap(True)
 
         self.page_mode_note = QLabel(
-            "Page moves change merged output order only. Source PDFs stay untouched."
+            "Page moves and deletes affect merged output only. Source PDFs stay untouched."
         )
         self.page_mode_note.setObjectName("mutedLabel")
         self.page_mode_note.setWordWrap(True)
@@ -235,8 +235,31 @@ class PdfToolsWidget(QWidget):
         self.page_move_down_button.setObjectName("secondaryButton")
         self.page_move_down_button.clicked.connect(lambda: self._move_selected_page(1))
 
+        self.page_delete_button = QPushButton("Delete Page")
+        self.page_delete_button.setObjectName("secondaryButton")
+        self.page_delete_button.clicked.connect(self._delete_selected_page)
+
+        self.page_target_position_edit = QLineEdit()
+        self.page_target_position_edit.setObjectName("timeSpin")
+        self.page_target_position_edit.setPlaceholderText("Pos")
+        self.page_target_position_edit.setFixedWidth(84)
+
+        self.page_move_to_position_button = QPushButton("Move to Position")
+        self.page_move_to_position_button.setObjectName("secondaryButton")
+        self.page_move_to_position_button.clicked.connect(
+            self._move_selected_page_to_position
+        )
+
+        self.page_reset_button = QPushButton("Reset Page Order")
+        self.page_reset_button.setObjectName("secondaryButton")
+        self.page_reset_button.clicked.connect(self._reset_page_order)
+
         page_move_row.addWidget(self.page_move_up_button)
         page_move_row.addWidget(self.page_move_down_button)
+        page_move_row.addWidget(self.page_delete_button)
+        page_move_row.addWidget(self.page_target_position_edit)
+        page_move_row.addWidget(self.page_move_to_position_button)
+        page_move_row.addWidget(self.page_reset_button)
         page_move_row.addStretch(1)
 
         output_panel = QFrame()
@@ -645,6 +668,12 @@ class PdfToolsWidget(QWidget):
         if self.merge_state.output_path is None:
             self._set_status("Choose output PDF path first.", "error")
             return
+        if self.merge_state.order_mode == ORDER_MODE_PAGE and not self.merge_state.pages:
+            self._set_status(
+                "Page Order merge has no pages left. Reset page order or add PDFs first.",
+                "error",
+            )
+            return
         try:
             if self.merge_state.order_mode == ORDER_MODE_PAGE:
                 output_path = self.service.merge_page_sequence(
@@ -752,7 +781,7 @@ class PdfToolsWidget(QWidget):
         self.page_mode_button.setChecked(self.merge_state.order_mode == ORDER_MODE_PAGE)
         if self.merge_state.order_mode == ORDER_MODE_PAGE:
             self.mode_summary_label.setText(
-                "Page order mode controls actual merged output. Select page row, move up/down, interleave pages from any source PDF."
+                "Page order mode controls actual merged output. Select row to move, delete from output, jump to position, or reset from current PDF queue."
             )
             self.page_mode_note.show()
         else:
@@ -804,6 +833,78 @@ class PdfToolsWidget(QWidget):
         self._refresh_page_move_buttons()
         self._set_status("Page output order updated.", "success")
 
+    def _delete_selected_page(self) -> None:
+        if self.merge_state.order_mode != ORDER_MODE_PAGE:
+            self._set_status("Switch to Page Order mode to delete output pages.", "error")
+            return
+
+        row = self._selected_page_row()
+        if row < 0:
+            self._set_status("Select page row first.", "error")
+            return
+
+        removed_page = self.merge_state.delete_page(row)
+        if removed_page is None:
+            self._set_status("Could not delete selected page.", "error")
+            return
+
+        next_row = min(row, len(self.merge_state.pages) - 1)
+        self._refresh_page_table()
+        if next_row >= 0:
+            self.page_table.selectRow(next_row)
+        self._refresh_page_move_buttons()
+        self._set_status(
+            f"Removed page {removed_page.original_page_number} from output order only.",
+            "success",
+        )
+
+    def _move_selected_page_to_position(self) -> None:
+        if self.merge_state.order_mode != ORDER_MODE_PAGE:
+            self._set_status("Switch to Page Order mode to move pages by position.", "error")
+            return
+
+        row = self._selected_page_row()
+        if row < 0:
+            self._set_status("Select page row first.", "error")
+            return
+
+        target_text = self.page_target_position_edit.text().strip()
+        if not target_text:
+            self._set_status("Enter target output position first.", "error")
+            return
+        if not target_text.isdigit():
+            self._set_status("Target output position must be a whole number.", "error")
+            return
+
+        target_position = int(target_text)
+        if target_position < 1:
+            self._set_status("Target output position must be at least 1.", "error")
+            return
+        if target_position > len(self.merge_state.pages):
+            self._set_status(
+                f"Target output position must be between 1 and {len(self.merge_state.pages)}.",
+                "error",
+            )
+            return
+
+        if not self.merge_state.move_page_to_position(row, target_position):
+            self._set_status("Could not move page to that output position.", "error")
+            return
+
+        self._refresh_page_table()
+        self.page_table.selectRow(target_position - 1)
+        self._refresh_page_move_buttons()
+        self._set_status(
+            f"Moved selected page to output position {target_position}.",
+            "success",
+        )
+
+    def _reset_page_order(self) -> None:
+        self.merge_state.reset_page_order()
+        self._refresh_page_table()
+        self._refresh_page_move_buttons()
+        self._set_status("Page order reset from current PDF queue.", "success")
+
     def _refresh_output_path(self) -> None:
         current_text = self.output_path_edit.text().strip()
         desired_text = ""
@@ -822,18 +923,31 @@ class PdfToolsWidget(QWidget):
     def _refresh_merge_button(self) -> None:
         self.merge_button.setEnabled(
             bool(self.merge_state.items) and self.merge_state.output_path is not None
+            and (
+                self.merge_state.order_mode != ORDER_MODE_PAGE
+                or bool(self.merge_state.pages)
+            )
         )
 
     def _refresh_page_move_buttons(self) -> None:
         selected_row = self._selected_page_row()
         page_mode_active = self.merge_state.order_mode == ORDER_MODE_PAGE
         has_selection = 0 <= selected_row < len(self.merge_state.pages)
+        page_count = len(self.merge_state.pages)
         self.page_move_up_button.setEnabled(page_mode_active and has_selection and selected_row > 0)
         self.page_move_down_button.setEnabled(
             page_mode_active
             and has_selection
             and selected_row < len(self.merge_state.pages) - 1
         )
+        self.page_delete_button.setEnabled(page_mode_active and has_selection)
+        self.page_target_position_edit.setEnabled(page_mode_active and page_count > 0)
+        if page_mode_active and has_selection:
+            self.page_target_position_edit.setText(str(selected_row + 1))
+        self.page_move_to_position_button.setEnabled(
+            page_mode_active and has_selection and page_count > 0
+        )
+        self.page_reset_button.setEnabled(page_mode_active and bool(self.merge_state.items))
 
     def _refresh_action_buttons(self) -> None:
         self.action_buttons[PDF_ACTION_MERGE].setChecked(

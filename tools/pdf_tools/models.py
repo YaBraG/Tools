@@ -112,12 +112,31 @@ class PdfMergeState:
         self._renumber_pages()
         return True
 
+    def move_page_to_position(self, source_index: int, target_position: int) -> bool:
+        if target_position < 1 or target_position > len(self.pages):
+            return False
+        return self.move_page(source_index, target_position - 1)
+
+    def delete_page(self, page_index: int) -> PdfPageItem | None:
+        if not (0 <= page_index < len(self.pages)):
+            return None
+        removed_page = self.pages.pop(page_index)
+        self._renumber_pages()
+        return removed_page
+
+    def reset_page_order(self) -> None:
+        self.rebuild_pages()
+
     def renumber_pages_from_current_order(self) -> None:
         self._renumber_pages()
 
     @property
     def total_pages(self) -> int:
         return sum(item.page_count for item in self.items)
+
+    @property
+    def current_page_count(self) -> int:
+        return len(self.pages)
 
     def _renumber_pages(self) -> None:
         self.pages = [
