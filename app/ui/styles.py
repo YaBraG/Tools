@@ -111,6 +111,21 @@ QLineEdit#toolSearch:focus {
     border-color: #3B82F6;
 }
 
+QLineEdit#workspaceInput {
+    background: #0F172A;
+    border: 1px solid #253044;
+    border-radius: 12px;
+    color: #F8FAFC;
+    font-size: 13px;
+    padding: 10px 12px;
+    selection-background-color: #2563EB;
+}
+
+QLineEdit#workspaceInput:hover,
+QLineEdit#workspaceInput:focus {
+    border-color: #3B82F6;
+}
+
 QComboBox#formatCombo,
 QDoubleSpinBox#timeSpin {
     background: #0F172A;
@@ -300,5 +315,61 @@ QPushButton#secondaryButton {
 
 QPushButton#secondaryButton:hover {
     background: #334155;
+}
+
+QPushButton:disabled {
+    color: #64748B;
+}
+
+QListWidget#pdfList,
+QTableWidget#pageTable {
+    background: #0F172A;
+    border: 1px solid #253044;
+    border-radius: 16px;
+    color: #E5E7EB;
+    gridline-color: #1F2937;
+    outline: none;
+}
+
+QListWidget#pdfList::item {
+    border: none;
+    padding: 4px;
+}
+
+QListWidget#pdfList::item:selected {
+    background: #172554;
+    border-radius: 14px;
+}
+
+QFrame#pdfQueueCard,
+QFrame#pdfOutputPanel {
+    background: #0B1220;
+    border: 1px solid #253044;
+    border-radius: 18px;
+}
+
+QLabel#pdfQueueTitle {
+    color: #F8FAFC;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QLabel#pdfQueuePath {
+    color: #94A3B8;
+    font-size: 12px;
+}
+
+QHeaderView::section {
+    background: #111827;
+    border: 0;
+    border-bottom: 1px solid #253044;
+    color: #CBD5E1;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 10px 8px;
+}
+
+QTableWidget#pageTable::item {
+    padding: 8px;
 }
 """
