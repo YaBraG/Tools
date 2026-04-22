@@ -1,16 +1,29 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
+import fitz
+from PIL import Image, UnidentifiedImageError
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 
 from shared.tool_base import ToolContext
-from tools.pdf_tools.models import PdfMergeItem, PdfPageItem, PdfPageRange
+from tools.pdf_tools.models import (
+    CONVERT_IMAGE_FORMAT_JPG,
+    CONVERT_IMAGE_FORMAT_PNG,
+    CONVERT_IMAGE_FORMATS,
+    PdfConvertImageItem,
+    PdfMergeItem,
+    PdfPageItem,
+    PdfPageRange,
+)
+
+SUPPORTED_CONVERT_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg")
 
 
 class PdfMergeError(ValueError):
-    """Raised when PDF merge cannot complete safely."""
+    """Raised when PDF work cannot complete safely."""
 
 
 class PdfMergeService:
@@ -18,7 +31,7 @@ class PdfMergeService:
         self.context = context
 
     def inspect_pdf(self, source_path: Path, *, document_id: str) -> PdfMergeItem:
-        resolved_path = self._validate_source_path(source_path)
+        resolved_path = self._validate_pdf_source_path(source_path)
         try:
             reader = PdfReader(str(resolved_path))
         except (OSError, PdfReadError) as error:
@@ -35,6 +48,24 @@ class PdfMergeService:
             source_path=resolved_path,
             display_name=resolved_path.name,
             page_count=page_count,
+        )
+
+    def inspect_image(self, source_path: Path, *, image_id: str) -> PdfConvertImageItem:
+        resolved_path = self._validate_image_source_path(source_path)
+        try:
+            with Image.open(resolved_path) as image:
+                width, height = image.size
+        except (OSError, UnidentifiedImageError) as error:
+            raise PdfMergeError(
+                f"Could not read image file: {resolved_path.name}"
+            ) from error
+
+        return PdfConvertImageItem(
+            image_id=image_id,
+            source_path=resolved_path,
+            display_name=resolved_path.name,
+            width=width,
+            height=height,
         )
 
     def merge_pdfs(
@@ -78,7 +109,7 @@ class PdfMergeService:
         open_handles: list[object] = []
         try:
             for page in pages:
-                resolved_path = self._validate_source_path(page.source_path)
+                resolved_path = self._validate_pdf_source_path(page.source_path)
                 reader = readers_by_path.get(resolved_path)
                 if reader is None:
                     handle = resolved_path.open("rb")
@@ -182,7 +213,7 @@ class PdfMergeService:
         if not ranges:
             raise PdfMergeError("Add at least one page range before split.")
 
-        resolved_path = self._validate_source_path(source_item.source_path)
+        resolved_path = self._validate_pdf_source_path(source_item.source_path)
         resolved_output_dir = self._validate_output_dir(output_dir)
         file_padding = max(3, len(str(source_item.page_count)))
 
@@ -231,6 +262,85 @@ class PdfMergeService:
 
         return tuple(written_paths)
 
+    def convert_pdf_to_images(
+        self,
+        source_item: PdfMergeItem,
+        output_dir: Path,
+        *,
+        image_format: str,
+        dpi: int,
+    ) -> tuple[Path, ...]:
+        if image_format not in CONVERT_IMAGE_FORMATS:
+            raise PdfMergeError(f"Unsupported output image format: {image_format}")
+        if dpi < 36:
+            raise PdfMergeError("DPI must be at least 36.")
+
+        resolved_path = self._validate_pdf_source_path(source_item.source_path)
+        resolved_output_dir = self._validate_output_dir(output_dir)
+        file_padding = max(3, len(str(source_item.page_count)))
+        planned_outputs = tuple(
+            resolved_output_dir
+            / f"{resolved_path.stem}-page-{page_number:0{file_padding}d}.{image_format}"
+            for page_number in range(1, source_item.page_count + 1)
+        )
+        self._ensure_outputs_do_not_exist(planned_outputs)
+
+        written_paths: list[Path] = []
+        try:
+            document = fitz.open(resolved_path)
+            for page_index, page in enumerate(document, start=1):
+                pixmap = page.get_pixmap(dpi=dpi, alpha=False)
+                output_path = planned_outputs[page_index - 1]
+                image = self._image_from_pixmap(pixmap)
+                save_format = "JPEG" if image_format == CONVERT_IMAGE_FORMAT_JPG else "PNG"
+                save_kwargs = {"format": save_format}
+                if image_format == CONVERT_IMAGE_FORMAT_JPG:
+                    if image.mode != "RGB":
+                        image = image.convert("RGB")
+                    save_kwargs["quality"] = 95
+                image.save(output_path, **save_kwargs)
+                written_paths.append(output_path)
+            document.close()
+        except (OSError, RuntimeError, ValueError) as error:
+            raise PdfMergeError(
+                f"Convert failed for source PDF: {resolved_path.name}"
+            ) from error
+
+        return tuple(written_paths)
+
+    def convert_images_to_pdf(
+        self,
+        items: list[PdfConvertImageItem],
+        output_path: Path,
+    ) -> Path:
+        if not items:
+            raise PdfMergeError("Add at least one image before convert.")
+
+        normalized_output = self._validate_output_path(output_path)
+        opened_images: list[Image.Image] = []
+        try:
+            for item in items:
+                resolved_path = self._validate_image_source_path(item.source_path)
+                image = Image.open(resolved_path)
+                opened_images.append(image.convert("RGB"))
+
+            first_image, *remaining_images = opened_images
+            first_image.save(
+                normalized_output,
+                format="PDF",
+                save_all=True,
+                append_images=remaining_images,
+            )
+        except (OSError, UnidentifiedImageError, ValueError) as error:
+            raise PdfMergeError(
+                f"Convert failed for output PDF: {normalized_output}"
+            ) from error
+        finally:
+            for image in opened_images:
+                image.close()
+
+        return normalized_output
+
     @staticmethod
     def suggested_output_path(items: list[PdfMergeItem]) -> Path | None:
         if not items:
@@ -245,12 +355,34 @@ class PdfMergeService:
         return source_item.source_path.parent
 
     @staticmethod
-    def _validate_source_path(source_path: Path) -> Path:
+    def suggested_convert_output_dir(source_item: PdfMergeItem | None) -> Path | None:
+        if source_item is None:
+            return None
+        return source_item.source_path.parent
+
+    @staticmethod
+    def suggested_image_to_pdf_output_path(items: list[PdfConvertImageItem]) -> Path | None:
+        if not items:
+            return None
+        first_path = items[0].source_path
+        return first_path.with_name(f"{first_path.stem}-images.pdf")
+
+    @staticmethod
+    def _validate_pdf_source_path(source_path: Path) -> Path:
         resolved_path = source_path.expanduser().resolve()
         if not resolved_path.exists() or not resolved_path.is_file():
             raise PdfMergeError(f"PDF file not found: {resolved_path}")
         if resolved_path.suffix.lower() != ".pdf":
             raise PdfMergeError(f"Unsupported file type: {resolved_path.name}")
+        return resolved_path
+
+    @staticmethod
+    def _validate_image_source_path(source_path: Path) -> Path:
+        resolved_path = source_path.expanduser().resolve()
+        if not resolved_path.exists() or not resolved_path.is_file():
+            raise PdfMergeError(f"Image file not found: {resolved_path}")
+        if resolved_path.suffix.lower() not in SUPPORTED_CONVERT_IMAGE_EXTENSIONS:
+            raise PdfMergeError(f"Unsupported image type: {resolved_path.name}")
         return resolved_path
 
     @staticmethod
@@ -294,3 +426,23 @@ class PdfMergeService:
         start_text = f"{page_range.start_page:0{file_padding}d}"
         end_text = f"{page_range.end_page:0{file_padding}d}"
         return f"{source_stem}-pages-{start_text}-{end_text}.pdf"
+
+    @staticmethod
+    def _ensure_outputs_do_not_exist(output_paths: tuple[Path, ...]) -> None:
+        duplicates = {path.name for path in output_paths if output_paths.count(path) > 1}
+        if duplicates:
+            duplicate_text = ", ".join(sorted(duplicates))
+            raise PdfMergeError(f"Output names would collide: {duplicate_text}")
+        for output_path in output_paths:
+            if output_path.exists():
+                raise PdfMergeError(f"Output file already exists: {output_path}")
+
+    @staticmethod
+    def _image_from_pixmap(pixmap: fitz.Pixmap) -> Image.Image:
+        mode = "RGB"
+        if pixmap.n == 1:
+            mode = "L"
+        elif pixmap.n == 4:
+            mode = "RGBA"
+        image_bytes = pixmap.tobytes("png")
+        return Image.open(BytesIO(image_bytes))

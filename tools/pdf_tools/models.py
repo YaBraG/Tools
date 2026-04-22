@@ -6,10 +6,23 @@ from pathlib import Path
 ORDER_MODE_PDF = "pdf"
 ORDER_MODE_PAGE = "page"
 ORDER_MODES = (ORDER_MODE_PDF, ORDER_MODE_PAGE)
+
 PDF_ACTION_MERGE = "merge"
 PDF_ACTION_SPLIT = "split"
+PDF_ACTION_CONVERT = "convert"
+
 SPLIT_MODE_EVERY_PAGE = "every_page"
 SPLIT_MODE_CUSTOM = "custom"
+
+CONVERT_MODE_PDF_TO_IMAGE = "pdf_to_image"
+CONVERT_MODE_IMAGE_TO_PDF = "image_to_pdf"
+CONVERT_IMAGE_FORMAT_PNG = "png"
+CONVERT_IMAGE_FORMAT_JPG = "jpg"
+CONVERT_IMAGE_FORMATS = (
+    CONVERT_IMAGE_FORMAT_PNG,
+    CONVERT_IMAGE_FORMAT_JPG,
+)
+CONVERT_DPI_DEFAULT = 200
 
 
 @dataclass(frozen=True)
@@ -48,6 +61,15 @@ class PdfPageRange:
     @property
     def page_numbers(self) -> tuple[int, ...]:
         return tuple(range(self.start_page, self.end_page + 1))
+
+
+@dataclass(frozen=True)
+class PdfConvertImageItem:
+    image_id: str
+    source_path: Path
+    display_name: str
+    width: int
+    height: int
 
 
 @dataclass
@@ -159,3 +181,41 @@ class PdfSplitState:
     split_mode: str = SPLIT_MODE_EVERY_PAGE
     custom_ranges_text: str = ""
     last_output_paths: tuple[Path, ...] = ()
+
+
+@dataclass
+class PdfConvertState:
+    convert_mode: str = CONVERT_MODE_PDF_TO_IMAGE
+    pdf_source_item: PdfMergeItem | None = None
+    image_items: list[PdfConvertImageItem] = field(default_factory=list)
+    output_dir: Path | None = None
+    output_path: Path | None = None
+    image_format: str = CONVERT_IMAGE_FORMAT_PNG
+    dpi: int = CONVERT_DPI_DEFAULT
+    last_output_paths: tuple[Path, ...] = ()
+    last_output_path: Path | None = None
+
+    def add_image_item(self, item: PdfConvertImageItem) -> None:
+        self.image_items.append(item)
+
+    def remove_image_item_at(self, index: int) -> PdfConvertImageItem:
+        return self.image_items.pop(index)
+
+    def move_image_item(self, source_index: int, target_index: int) -> bool:
+        if not (0 <= source_index < len(self.image_items)):
+            return False
+        if not (0 <= target_index < len(self.image_items)):
+            return False
+        if source_index == target_index:
+            return False
+        item = self.image_items.pop(source_index)
+        self.image_items.insert(target_index, item)
+        return True
+
+    def clear_pdf_source(self) -> None:
+        self.pdf_source_item = None
+        self.last_output_paths = ()
+
+    def clear_image_items(self) -> None:
+        self.image_items.clear()
+        self.last_output_path = None
