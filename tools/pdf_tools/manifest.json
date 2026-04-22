@@ -1,9 +1,9 @@
 {
   "id": "pdf_tools",
   "name": "PDF Tools",
-  "description": "Merge, split, and convert PDFs with a dark desktop workspace for page ordering and PDF/image workflows.",
+  "description": "Merge PDFs, split pages or ranges, and convert between PDFs and page images in a dark desktop workspace.",
   "entry_point": "tools.pdf_tools.tool:PdfToolsTool",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "category": "PDF",
   "tags": ["pdf", "merge", "split", "convert", "images", "documents"]
 }
