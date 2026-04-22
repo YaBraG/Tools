@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from PySide6.QtCore import QSignalBlocker, Qt, QUrl
+from PySide6.QtCore import QSignalBlocker, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -82,6 +82,51 @@ def classify_split_drop_paths(paths: list[Path]) -> SplitDropSelection:
         output_dir_path=output_dir_path,
         skipped_items=skipped_items,
     )
+
+
+class PdfSplitDropZone(QFrame):
+    clicked = Signal()
+    paths_dropped = Signal(list)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("splitDropZone")
+        self.setAcceptDrops(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            self.setProperty("dropActive", True)
+            self.style().unpolish(self)
+            self.style().polish(self)
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragLeaveEvent(self, event) -> None:  # type: ignore[override]
+        self.setProperty("dropActive", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        self.setProperty("dropActive", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        urls = event.mimeData().urls()
+        paths = [Path(url.toLocalFile()) for url in urls if url.isLocalFile()]
+        if paths:
+            self.paths_dropped.emit(paths)
+            event.acceptProposedAction()
+            return
+        super().dropEvent(event)
 
 
 class PdfToolsWidget(QWidget):
@@ -387,15 +432,29 @@ class PdfToolsWidget(QWidget):
         source_drop_hint.setObjectName("mutedLabel")
         source_drop_hint.setWordWrap(True)
 
-        source_button_row = QHBoxLayout()
-        source_button_row.setSpacing(10)
+        self.split_drop_zone = PdfSplitDropZone()
+        self.split_drop_zone.clicked.connect(self._choose_split_pdf)
+        self.split_drop_zone.paths_dropped.connect(self._handle_split_drop_from_zone)
 
-        self.split_open_button = QPushButton("Open PDF")
-        self.split_open_button.setObjectName("secondaryButton")
-        self.split_open_button.clicked.connect(self._choose_split_pdf)
+        split_drop_zone_layout = QVBoxLayout(self.split_drop_zone)
+        split_drop_zone_layout.setContentsMargins(18, 18, 18, 18)
+        split_drop_zone_layout.setSpacing(6)
 
-        source_button_row.addWidget(self.split_open_button)
-        source_button_row.addStretch(1)
+        self.split_drop_zone_title = QLabel("Click to select or drop a PDF")
+        self.split_drop_zone_title.setObjectName("splitDropZoneTitle")
+        self.split_drop_zone_title.setWordWrap(True)
+
+        self.split_drop_zone_meta = QLabel("Drop a folder to set output")
+        self.split_drop_zone_meta.setObjectName("splitDropZoneMeta")
+        self.split_drop_zone_meta.setWordWrap(True)
+
+        self.split_drop_zone_caption = QLabel("Source file stays untouched.")
+        self.split_drop_zone_caption.setObjectName("mutedLabel")
+        self.split_drop_zone_caption.setWordWrap(True)
+
+        split_drop_zone_layout.addWidget(self.split_drop_zone_title)
+        split_drop_zone_layout.addWidget(self.split_drop_zone_meta)
+        split_drop_zone_layout.addWidget(self.split_drop_zone_caption)
 
         self.split_file_label = QLabel("No PDF selected")
         self.split_file_label.setObjectName("workspaceTitle")
@@ -410,7 +469,7 @@ class PdfToolsWidget(QWidget):
         source_layout.addWidget(source_title)
         source_layout.addWidget(source_subtitle)
         source_layout.addWidget(source_drop_hint)
-        source_layout.addLayout(source_button_row)
+        source_layout.addWidget(self.split_drop_zone)
         source_layout.addWidget(self.split_file_label)
         source_layout.addWidget(self.split_path_label)
         source_layout.addWidget(self.split_page_count_label)
@@ -680,6 +739,9 @@ class PdfToolsWidget(QWidget):
 
         self._set_split_status(" ".join(status_parts), status_kind)
         return loaded_item is not None or selection.output_dir_path is not None
+
+    def _handle_split_drop_from_zone(self, paths: list[Path]) -> None:
+        self._handle_split_drop(paths)
 
     def _split_pdf(self) -> None:
         source_item = self.split_state.source_item
@@ -1057,10 +1119,20 @@ class PdfToolsWidget(QWidget):
             self.split_file_label.setText("No PDF selected")
             self.split_path_label.setText("Source path: -")
             self.split_page_count_label.setText("Page count: -")
+            self.split_drop_zone_title.setText("Click to select or drop a PDF")
+            self.split_drop_zone_meta.setText("Drop a folder to set output")
+            self.split_drop_zone_caption.setText("Source file stays untouched.")
         else:
             self.split_file_label.setText(source_item.display_name)
             self.split_path_label.setText(f"Source path: {source_item.source_path}")
             self.split_page_count_label.setText(f"Page count: {source_item.page_count}")
+            self.split_drop_zone_title.setText(source_item.display_name)
+            self.split_drop_zone_meta.setText(
+                f"{source_item.page_count} page(s) loaded"
+            )
+            self.split_drop_zone_caption.setText(
+                "Click or drop another PDF to replace. Drop a folder to set output."
+            )
 
         desired_output_dir = ""
         if self.split_state.output_dir is not None:
