@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
@@ -37,6 +38,50 @@ from tools.pdf_tools.models import (
     SPLIT_MODE_EVERY_PAGE,
 )
 from tools.pdf_tools.service import PdfMergeError, PdfMergeService
+
+
+@dataclass(frozen=True)
+class SplitDropSelection:
+    source_pdf_path: Path | None
+    output_dir_path: Path | None
+    skipped_items: list[str]
+
+
+def classify_split_drop_paths(paths: list[Path]) -> SplitDropSelection:
+    source_pdf_path: Path | None = None
+    output_dir_path: Path | None = None
+    skipped_items: list[str] = []
+
+    for raw_path in paths:
+        resolved_path = raw_path.expanduser().resolve()
+        display_name = resolved_path.name or str(resolved_path)
+
+        if not resolved_path.exists():
+            skipped_items.append(f"{display_name}: missing item")
+            continue
+        if resolved_path.is_dir():
+            if output_dir_path is None:
+                output_dir_path = resolved_path
+            else:
+                skipped_items.append(f"{display_name}: extra folder ignored")
+            continue
+        if resolved_path.is_file():
+            if resolved_path.suffix.lower() != ".pdf":
+                skipped_items.append(f"{display_name}: not a PDF")
+                continue
+            if source_pdf_path is None:
+                source_pdf_path = resolved_path
+            else:
+                skipped_items.append(f"{display_name}: extra PDF ignored")
+            continue
+
+        skipped_items.append(f"{display_name}: unsupported item")
+
+    return SplitDropSelection(
+        source_pdf_path=source_pdf_path,
+        output_dir_path=output_dir_path,
+        skipped_items=skipped_items,
+    )
 
 
 class PdfToolsWidget(QWidget):
@@ -336,6 +381,12 @@ class PdfToolsWidget(QWidget):
         source_subtitle.setObjectName("panelBody")
         source_subtitle.setWordWrap(True)
 
+        source_drop_hint = QLabel(
+            "Drag a PDF here to split it, or drop a folder to set output."
+        )
+        source_drop_hint.setObjectName("mutedLabel")
+        source_drop_hint.setWordWrap(True)
+
         source_button_row = QHBoxLayout()
         source_button_row.setSpacing(10)
 
@@ -358,6 +409,7 @@ class PdfToolsWidget(QWidget):
 
         source_layout.addWidget(source_title)
         source_layout.addWidget(source_subtitle)
+        source_layout.addWidget(source_drop_hint)
         source_layout.addLayout(source_button_row)
         source_layout.addWidget(self.split_file_label)
         source_layout.addWidget(self.split_path_label)
@@ -549,11 +601,14 @@ class PdfToolsWidget(QWidget):
         if not file_name:
             return
 
+        self._load_split_source_pdf(Path(file_name))
+
+    def _load_split_source_pdf(self, path: Path) -> PdfMergeItem | None:
         try:
-            item = self.service.inspect_pdf(Path(file_name), document_id=uuid4().hex)
+            item = self.service.inspect_pdf(path, document_id=uuid4().hex)
         except PdfMergeError as error:
             self._set_split_status(str(error), "error")
-            return
+            return None
 
         self.split_state.source_item = item
         if self.split_state.output_dir is None:
@@ -561,7 +616,7 @@ class PdfToolsWidget(QWidget):
             if suggested_dir is not None:
                 self.split_state.output_dir = suggested_dir
         self._refresh_split_workspace()
-        self._set_split_status(f"Loaded {item.display_name} for split.", "success")
+        return item
 
     def _choose_split_output_dir(self) -> None:
         selected_dir = QFileDialog.getExistingDirectory(
@@ -589,6 +644,42 @@ class PdfToolsWidget(QWidget):
         self.split_state.split_mode = mode
         self._refresh_split_mode_buttons()
         self._refresh_split_button()
+
+    def _handle_split_drop(self, paths: list[Path]) -> bool:
+        selection = classify_split_drop_paths(paths)
+        status_parts: list[str] = []
+        status_kind = "info"
+
+        loaded_item = None
+        if selection.source_pdf_path is not None:
+            loaded_item = self._load_split_source_pdf(selection.source_pdf_path)
+            if loaded_item is not None:
+                status_parts.append(f"Loaded {loaded_item.display_name} for split.")
+                status_kind = "success"
+            else:
+                status_kind = "error"
+
+        if selection.output_dir_path is not None:
+            self.split_state.output_dir = selection.output_dir_path
+            self._refresh_split_workspace()
+            status_parts.append(f"Output folder set to {selection.output_dir_path}")
+            if status_kind != "error":
+                status_kind = "success"
+
+        if selection.skipped_items:
+            status_parts.append("Ignored: " + " | ".join(selection.skipped_items[-4:]))
+            if not status_parts[:-1]:
+                status_kind = "error"
+
+        if not status_parts:
+            self._set_split_status(
+                "Drop a PDF to load split source, or drop a folder to set output.",
+                "error",
+            )
+            return False
+
+        self._set_split_status(" ".join(status_parts), status_kind)
+        return loaded_item is not None or selection.output_dir_path is not None
 
     def _split_pdf(self) -> None:
         source_item = self.split_state.source_item
@@ -1050,9 +1141,14 @@ class PdfToolsWidget(QWidget):
             super().dropEvent(event)
             return
         paths = [Path(url.toLocalFile()) for url in urls if url.isLocalFile()]
-        pdf_paths = [path for path in paths if path.suffix.lower() == ".pdf"]
-        if pdf_paths:
-            self._add_pdf_paths(pdf_paths)
-            event.acceptProposedAction()
-            return
+        if self.active_action == PDF_ACTION_SPLIT:
+            if self._handle_split_drop(paths):
+                event.acceptProposedAction()
+                return
+        else:
+            pdf_paths = [path for path in paths if path.suffix.lower() == ".pdf"]
+            if pdf_paths:
+                self._add_pdf_paths(pdf_paths)
+                event.acceptProposedAction()
+                return
         super().dropEvent(event)
