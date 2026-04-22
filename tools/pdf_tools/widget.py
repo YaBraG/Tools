@@ -119,7 +119,7 @@ class PdfToolsWidget(QWidget):
         title.setObjectName("workspaceTitle")
 
         subtitle = QLabel(
-            "Merge is live now. Split, compress, and convert stay visible as next actions."
+            "Merge and Split are live now. Convert stays visible as the next action."
         )
         subtitle.setObjectName("panelBody")
         subtitle.setWordWrap(True)
@@ -130,7 +130,6 @@ class PdfToolsWidget(QWidget):
         for action_key, label, enabled in (
             (PDF_ACTION_MERGE, "Merge", True),
             (PDF_ACTION_SPLIT, "Split", True),
-            ("compress", "Compress", False),
             ("convert", "Convert", False),
         ):
             button = QPushButton(label)
