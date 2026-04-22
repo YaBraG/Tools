@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -102,13 +103,17 @@ class PdfToolsWidget(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
+        layout.setSpacing(12)
 
         header_panel = QFrame()
         header_panel.setObjectName("workspacePanel")
+        header_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         header_layout = QVBoxLayout(header_panel)
-        header_layout.setContentsMargins(18, 18, 18, 18)
-        header_layout.setSpacing(12)
+        header_layout.setContentsMargins(16, 16, 16, 16)
+        header_layout.setSpacing(10)
 
         title = QLabel("PDF workspace")
         title.setObjectName("workspaceTitle")
@@ -154,13 +159,17 @@ class PdfToolsWidget(QWidget):
         page = QWidget()
         body = QHBoxLayout(page)
         body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(16)
+        body.setSpacing(12)
 
         left_panel = QFrame()
         left_panel.setObjectName("workspacePanel")
+        left_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(18, 18, 18, 18)
-        left_layout.setSpacing(12)
+        left_layout.setContentsMargins(16, 16, 16, 16)
+        left_layout.setSpacing(10)
 
         left_title = QLabel("Merge queue")
         left_title.setObjectName("panelTitle")
@@ -177,9 +186,13 @@ class PdfToolsWidget(QWidget):
         )
         self.merge_drop_card.clicked.connect(self._choose_pdf_files)
         self.merge_drop_card.paths_dropped.connect(self._add_pdf_paths)
+        self.merge_drop_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
 
         file_button_row = QHBoxLayout()
-        file_button_row.setSpacing(10)
+        file_button_row.setSpacing(8)
 
         self.remove_button = QPushButton("Remove Selected")
         self.remove_button.setObjectName("secondaryButton")
@@ -194,7 +207,7 @@ class PdfToolsWidget(QWidget):
         self.pdf_list.currentRowChanged.connect(self._refresh_reorder_buttons)
 
         reorder_row = QHBoxLayout()
-        reorder_row.setSpacing(10)
+        reorder_row.setSpacing(8)
 
         self.move_up_button = QPushButton("Move Up")
         self.move_up_button.setObjectName("secondaryButton")
@@ -223,12 +236,16 @@ class PdfToolsWidget(QWidget):
 
         right_panel = QFrame()
         right_panel.setObjectName("workspacePanel")
+        right_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(18, 18, 18, 18)
-        right_layout.setSpacing(12)
+        right_layout.setContentsMargins(16, 16, 16, 16)
+        right_layout.setSpacing(10)
 
         mode_row = QHBoxLayout()
-        mode_row.setSpacing(10)
+        mode_row.setSpacing(8)
 
         self.pdf_mode_button = QPushButton("PDF Order")
         self.pdf_mode_button.setObjectName("modeTab")
@@ -265,6 +282,10 @@ class PdfToolsWidget(QWidget):
         self.page_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.page_table.setAlternatingRowColors(True)
         self.page_table.verticalHeader().setVisible(False)
+        self.page_table.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         self.page_table.setHorizontalHeaderLabels(
             ["Output", "Source PDF", "Original Page", "Source Path"]
         )
@@ -274,7 +295,7 @@ class PdfToolsWidget(QWidget):
         self.page_table.itemSelectionChanged.connect(self._refresh_page_move_buttons)
 
         page_move_row = QHBoxLayout()
-        page_move_row.setSpacing(10)
+        page_move_row.setSpacing(8)
 
         self.page_move_up_button = QPushButton("Move Page Up")
         self.page_move_up_button.setObjectName("secondaryButton")
@@ -291,7 +312,7 @@ class PdfToolsWidget(QWidget):
         self.page_target_position_edit = QLineEdit()
         self.page_target_position_edit.setObjectName("timeSpin")
         self.page_target_position_edit.setPlaceholderText("Pos")
-        self.page_target_position_edit.setFixedWidth(84)
+        self.page_target_position_edit.setMaximumWidth(84)
 
         self.page_move_to_position_button = QPushButton("Move to Position")
         self.page_move_to_position_button.setObjectName("secondaryButton")
@@ -313,10 +334,14 @@ class PdfToolsWidget(QWidget):
 
         output_panel = QFrame()
         output_panel.setObjectName("pdfOutputPanel")
+        output_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         output_layout = QGridLayout(output_panel)
-        output_layout.setContentsMargins(16, 16, 16, 16)
-        output_layout.setHorizontalSpacing(10)
-        output_layout.setVerticalSpacing(10)
+        output_layout.setContentsMargins(14, 14, 14, 14)
+        output_layout.setHorizontalSpacing(8)
+        output_layout.setVerticalSpacing(8)
 
         output_title = QLabel("Output")
         output_title.setObjectName("panelTitle")
@@ -368,13 +393,17 @@ class PdfToolsWidget(QWidget):
         page = QWidget()
         layout = QHBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
+        layout.setSpacing(12)
 
         source_panel = QFrame()
         source_panel.setObjectName("workspacePanel")
+        source_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         source_layout = QVBoxLayout(source_panel)
-        source_layout.setContentsMargins(18, 18, 18, 18)
-        source_layout.setSpacing(12)
+        source_layout.setContentsMargins(16, 16, 16, 16)
+        source_layout.setSpacing(10)
 
         source_title = QLabel("Split source")
         source_title.setObjectName("panelTitle")
@@ -391,6 +420,10 @@ class PdfToolsWidget(QWidget):
         )
         self.split_drop_card.clicked.connect(self._choose_split_pdf)
         self.split_drop_card.paths_dropped.connect(self._handle_split_drop_from_zone)
+        self.split_drop_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
 
         self.split_file_label = QLabel("No PDF selected")
         self.split_file_label.setObjectName("workspaceTitle")
@@ -413,9 +446,13 @@ class PdfToolsWidget(QWidget):
 
         split_panel = QFrame()
         split_panel.setObjectName("workspacePanel")
+        split_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         split_layout = QVBoxLayout(split_panel)
-        split_layout.setContentsMargins(18, 18, 18, 18)
-        split_layout.setSpacing(12)
+        split_layout.setContentsMargins(16, 16, 16, 16)
+        split_layout.setSpacing(10)
 
         split_title = QLabel("Split options")
         split_title.setObjectName("panelTitle")
@@ -441,7 +478,7 @@ class PdfToolsWidget(QWidget):
         )
 
         split_mode_row = QHBoxLayout()
-        split_mode_row.setSpacing(10)
+        split_mode_row.setSpacing(8)
         split_mode_row.addWidget(self.split_every_button)
         split_mode_row.addWidget(self.split_custom_button)
         split_mode_row.addStretch(1)
@@ -450,7 +487,7 @@ class PdfToolsWidget(QWidget):
         split_output_label.setObjectName("mutedLabel")
 
         split_output_row = QHBoxLayout()
-        split_output_row.setSpacing(10)
+        split_output_row.setSpacing(8)
 
         self.split_output_dir_edit = QLineEdit()
         self.split_output_dir_edit.setObjectName("workspaceInput")

@@ -31,8 +31,8 @@ class MainWindow(QMainWindow):
         self.open_tool_windows: dict[str, ToolDialog] = {}
 
         self.setWindowTitle("Tools")
-        self.resize(1180, 740)
-        self.setMinimumSize(960, 620)
+        self.resize(1220, 760)
+        self.setMinimumSize(920, 620)
 
         self._build_ui()
         self._show_page("home")

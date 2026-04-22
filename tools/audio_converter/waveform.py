@@ -17,7 +17,7 @@ class AudioWaveformWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAcceptDrops(True)
-        self.setMinimumHeight(260)
+        self.setMinimumHeight(220)
         self.waveform_points: tuple[float, ...] = ()
         self.duration_seconds = 0.0
         self.trim_start_seconds = 0.0
@@ -28,10 +28,10 @@ class AudioWaveformWidget(QWidget):
         self._drag_handle: str | None = None
 
     def sizeHint(self) -> QSize:  # noqa: D401
-        return QSize(900, 280)
+        return QSize(900, 240)
 
     def minimumSizeHint(self) -> QSize:  # noqa: D401
-        return QSize(420, 240)
+        return QSize(380, 200)
 
     def set_audio(
         self,

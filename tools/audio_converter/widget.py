@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QStackedWidget,
     QVBoxLayout,
@@ -107,10 +108,10 @@ class AudioToolsWidget(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
+        layout.setSpacing(12)
 
         top_row = QHBoxLayout()
-        top_row.setSpacing(10)
+        top_row.setSpacing(8)
 
         self.file_label = QLabel("No audio loaded")
         self.file_label.setObjectName("workspaceTitle")
@@ -144,6 +145,10 @@ class AudioToolsWidget(QWidget):
             subtitle=f"Supported: {supported_formats}",
             caption="Accepts: audio files | Single file",
         )
+        self.audio_file_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
 
         self.playback_hint_label = QLabel(
             "Preview: load audio to hear the current result."
@@ -154,7 +159,7 @@ class AudioToolsWidget(QWidget):
         self.mode_group = QButtonGroup(self)
         self.mode_group.setExclusive(True)
         mode_row = QHBoxLayout()
-        mode_row.setSpacing(10)
+        mode_row.setSpacing(8)
         self.mode_buttons: dict[str, QPushButton] = {}
         for mode_key, label in (
             ("volume", "Volume"),
@@ -173,15 +178,23 @@ class AudioToolsWidget(QWidget):
         mode_row.addStretch(1)
 
         self.waveform = AudioWaveformWidget()
+        self.waveform.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         self.waveform.file_dropped.connect(self._load_audio_file)
         self.waveform.trim_changed.connect(self._on_trim_changed)
         self.waveform.seek_requested.connect(self._seek_to_seconds)
 
         self.controls_panel = QFrame()
         self.controls_panel.setObjectName("workspacePanel")
+        self.controls_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         controls_layout = QVBoxLayout(self.controls_panel)
-        controls_layout.setContentsMargins(18, 18, 18, 18)
-        controls_layout.setSpacing(14)
+        controls_layout.setContentsMargins(16, 16, 16, 16)
+        controls_layout.setSpacing(12)
 
         controls_layout.addWidget(self._build_trim_page())
         self.mode_stack = QStackedWidget()
@@ -192,12 +205,16 @@ class AudioToolsWidget(QWidget):
 
         export_panel = QFrame()
         export_panel.setObjectName("workspacePanel")
+        export_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         export_layout = QVBoxLayout(export_panel)
-        export_layout.setContentsMargins(18, 18, 18, 18)
-        export_layout.setSpacing(12)
+        export_layout.setContentsMargins(16, 16, 16, 16)
+        export_layout.setSpacing(10)
 
         export_top = QHBoxLayout()
-        export_top.setSpacing(10)
+        export_top.setSpacing(8)
 
         export_label = QLabel("Export format")
         export_label.setObjectName("mutedLabel")
