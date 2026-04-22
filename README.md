@@ -8,7 +8,10 @@ Inno Setup, and GitHub Releases.
 Today the repo includes:
 
 - Audio Tools: a real offline audio editing workspace powered by bundled FFmpeg
-- File Renamer: placeholder tool scaffold
+- File Renamer: an interactive placeholder tool window used to validate the desktop tool architecture
+
+Different tool windows can stay open at the same time, while each individual
+tool remains single-instance inside the app.
 
 ## Stack
 

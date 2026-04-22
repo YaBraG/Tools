@@ -28,6 +28,7 @@ class MainWindow(QMainWindow):
         self.tools = self.registry.discover_tools()
         self.nav_buttons: dict[str, QPushButton] = {}
         self.pages: dict[str, QWidget] = {}
+        self.open_tool_windows: dict[str, ToolDialog] = {}
 
         self.setWindowTitle("Tools")
         self.resize(1180, 740)
@@ -123,13 +124,39 @@ class MainWindow(QMainWindow):
             button.setChecked(page_key == key)
 
     def _open_tool(self, manifest: ToolManifest) -> None:
+        existing_window = self.open_tool_windows.get(manifest.id)
+        if existing_window is not None:
+            self._focus_tool_window(existing_window)
+            return
+
         try:
             tool = self.registry.create_tool(manifest)
             dialog = ToolDialog(manifest, tool, self)
-            dialog.exec()
+            dialog.finished.connect(
+                lambda _result, tool_id=manifest.id, window=dialog: self._on_tool_closed(
+                    tool_id,
+                    window,
+                )
+            )
+            self.open_tool_windows[manifest.id] = dialog
+            dialog.show()
+            self._focus_tool_window(dialog)
         except Exception as error:
             QMessageBox.critical(
                 self,
                 "Unable to open tool",
                 f"Tools could not open {manifest.name}.\n\n{error}",
             )
+
+    def _focus_tool_window(self, window: ToolDialog) -> None:
+        if window.isMinimized():
+            window.showNormal()
+        else:
+            window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def _on_tool_closed(self, tool_id: str, window: ToolDialog) -> None:
+        current_window = self.open_tool_windows.get(tool_id)
+        if current_window is window:
+            self.open_tool_windows.pop(tool_id, None)

@@ -28,9 +28,12 @@ class ToolDialog(QDialog):
         super().__init__(parent)
 
         self.setObjectName("toolDialog")
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
         self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
         self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
+        self.setModal(False)
+        self.setWindowModality(Qt.WindowModality.NonModal)
         self.setWindowTitle(f"{manifest.name} - Tools")
         self.resize(self._initial_size())
         self.setMinimumSize(860, 600)
