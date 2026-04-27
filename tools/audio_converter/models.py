@@ -11,6 +11,10 @@ MIN_SPEED = 0.5
 MAX_SPEED = 2.0
 MIN_PITCH = -12
 MAX_PITCH = 12
+PITCH_PRECISION_DIGITS = 2
+PITCH_STEP_SEMITONES = 0.01
+PITCH_SLIDER_SCALE = 100
+PITCH_EPSILON = PITCH_STEP_SEMITONES / 2.0
 MIN_TRIM_SPAN_SECONDS = 0.05
 TRIM_PRECISION_DIGITS = 2
 TRIM_PRECISION_SECONDS = 0.01
@@ -38,7 +42,7 @@ class AudioEditState:
     trim_end_seconds: float = 0.0
     volume_percent: int = 100
     speed_percent: int = 100
-    pitch_semitones: int = 0
+    pitch_semitones: float = 0.0
     output_format: str = "mp3"
     last_export_path: Path | None = None
     active_mode: str = DEFAULT_EDITOR_MODE
@@ -48,7 +52,7 @@ class AudioEditState:
         self.trim_end_seconds = duration_seconds
         self.volume_percent = 100
         self.speed_percent = 100
-        self.pitch_semitones = 0
+        self.pitch_semitones = 0.0
         self.last_export_path = None
         if self.output_format not in SUPPORTED_OUTPUT_FORMATS:
             self.output_format = "mp3"
@@ -76,7 +80,7 @@ class AudioEditState:
             summary.append("volume")
         if self.speed_percent != 100:
             summary.append("speed")
-        if self.pitch_semitones != 0:
+        if abs(self.pitch_semitones) >= PITCH_EPSILON:
             summary.append("pitch")
         return tuple(summary)
 

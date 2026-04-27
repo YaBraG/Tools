@@ -48,6 +48,10 @@ from tools.audio_converter.models import (
     MAX_SPEED,
     MIN_PITCH,
     MIN_SPEED,
+    PITCH_EPSILON,
+    PITCH_PRECISION_DIGITS,
+    PITCH_SLIDER_SCALE,
+    PITCH_STEP_SEMITONES,
     MIN_TRIM_SPAN_SECONDS,
     SUPPORTED_INPUT_FORMATS,
     SUPPORTED_OUTPUT_FORMATS,
@@ -361,7 +365,7 @@ class AudioToolsWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
-        help_text = QLabel("Shift pitch from -12 to +12 semitones.")
+        help_text = QLabel("Shift pitch from -12.00 to +12.00 semitones.")
         help_text.setObjectName("panelBody")
 
         row = QHBoxLayout()
@@ -369,11 +373,15 @@ class AudioToolsWidget(QWidget):
 
         self.pitch_slider = QSlider(Qt.Orientation.Horizontal)
         self.pitch_slider.setObjectName("editSlider")
-        self.pitch_slider.setRange(MIN_PITCH, MAX_PITCH)
-        self.pitch_slider.setSingleStep(1)
+        self.pitch_slider.setRange(
+            int(MIN_PITCH * PITCH_SLIDER_SCALE),
+            int(MAX_PITCH * PITCH_SLIDER_SCALE),
+        )
+        self.pitch_slider.setSingleStep(int(PITCH_STEP_SEMITONES * PITCH_SLIDER_SCALE))
+        self.pitch_slider.setPageStep(25)
         self.pitch_slider.valueChanged.connect(self._on_pitch_changed)
 
-        self.pitch_value_label = QLabel("+0 st")
+        self.pitch_value_label = QLabel("+0.00 st")
         self.pitch_value_label.setObjectName("valueBadge")
 
         row.addWidget(self.pitch_slider, 1)
@@ -750,10 +758,11 @@ class AudioToolsWidget(QWidget):
         self.speed_value_label.setText(f"{value / 100.0:.2f}x")
         self._update_playback_hint()
 
-    def _on_pitch_changed(self, value: int) -> None:
+    def _on_pitch_changed(self, slider_value: int) -> None:
+        value = slider_value / PITCH_SLIDER_SCALE
         self.state.pitch_semitones = value
         self._mark_preview_dirty()
-        self.pitch_value_label.setText(f"{value:+d} st")
+        self.pitch_value_label.setText(f"{value:+.{PITCH_PRECISION_DIGITS}f} st")
         self._update_playback_hint()
 
     def _on_output_format_changed(self, output_format: str) -> None:
@@ -997,12 +1006,14 @@ class AudioToolsWidget(QWidget):
             with QSignalBlocker(self.speed_slider):
                 self.speed_slider.setValue(self.state.speed_percent)
             with QSignalBlocker(self.pitch_slider):
-                self.pitch_slider.setValue(self.state.pitch_semitones)
+                self.pitch_slider.setValue(self._pitch_slider_value())
             with QSignalBlocker(self.format_combo):
                 self.format_combo.setCurrentText(self.state.output_format)
             self.volume_value_label.setText(f"{self.state.volume_percent}%")
             self.speed_value_label.setText(f"{self.state.speed_multiplier:.2f}x")
-            self.pitch_value_label.setText(f"{self.state.pitch_semitones:+d} st")
+            self.pitch_value_label.setText(
+                f"{self.state.pitch_semitones:+.{PITCH_PRECISION_DIGITS}f} st"
+            )
             self._update_export_preview()
             self._update_trim_summary()
             self._update_playback_hint()
@@ -1022,13 +1033,15 @@ class AudioToolsWidget(QWidget):
         with QSignalBlocker(self.speed_slider):
             self.speed_slider.setValue(self.state.speed_percent)
         with QSignalBlocker(self.pitch_slider):
-            self.pitch_slider.setValue(self.state.pitch_semitones)
+            self.pitch_slider.setValue(self._pitch_slider_value())
         with QSignalBlocker(self.format_combo):
             self.format_combo.setCurrentText(self.state.output_format)
 
         self.volume_value_label.setText(f"{self.state.volume_percent}%")
         self.speed_value_label.setText(f"{self.state.speed_multiplier:.2f}x")
-        self.pitch_value_label.setText(f"{self.state.pitch_semitones:+d} st")
+        self.pitch_value_label.setText(
+            f"{self.state.pitch_semitones:+.{PITCH_PRECISION_DIGITS}f} st"
+        )
 
         self._update_waveform()
         self._update_trim_summary()
@@ -1279,7 +1292,7 @@ class AudioToolsWidget(QWidget):
             trim_changed
             or self.state.volume_percent != 100
             or self.state.speed_percent != 100
-            or self.state.pitch_semitones != 0
+            or abs(self.state.pitch_semitones) >= PITCH_EPSILON
         )
 
     def _current_result_signature(self) -> tuple[object, ...] | None:
@@ -1294,8 +1307,11 @@ class AudioToolsWidget(QWidget):
             round(self.state.trim_end_seconds, 2),
             self.state.volume_percent,
             self.state.speed_percent,
-            self.state.pitch_semitones,
+            round(self.state.pitch_semitones, PITCH_PRECISION_DIGITS),
         )
+
+    def _pitch_slider_value(self) -> int:
+        return int(round(self.state.pitch_semitones * PITCH_SLIDER_SCALE))
 
     def _selected_source_range(self) -> tuple[float, float]:
         if self.audio_file is None:

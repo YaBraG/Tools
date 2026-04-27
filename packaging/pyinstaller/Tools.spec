@@ -3,7 +3,11 @@
 import json
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_dynamic_libs,
+    collect_submodules,
+)
 
 ROOT_DIR = Path(SPECPATH).resolve().parents[1]
 TOOLS_DIR = ROOT_DIR / "tools"
@@ -13,6 +17,8 @@ LICENSE_FILE = ROOT_DIR / "LICENSE"
 
 def discover_tool_hidden_imports() -> list[str]:
     hidden_imports = set(collect_submodules("tools"))
+    hidden_imports.update(collect_submodules("fitz"))
+    hidden_imports.update(collect_submodules("pymupdf"))
 
     for manifest_path in sorted(TOOLS_DIR.glob("*/manifest.json")):
         with manifest_path.open("r", encoding="utf-8") as manifest_file:
@@ -41,6 +47,8 @@ else:
 
 datas.extend(collect_data_files("certifi"))
 
+binaries = collect_dynamic_libs("pymupdf")
+
 for required_ffmpeg_file in (
     ASSETS_DIR / "ffmpeg" / "bin" / "ffmpeg.exe",
     ASSETS_DIR / "ffmpeg" / "bin" / "ffprobe.exe",
@@ -61,7 +69,7 @@ version_file = ROOT_DIR / "build" / "version_info.txt"
 a = Analysis(
     [str(ROOT_DIR / "app" / "main.py")],
     pathex=[str(ROOT_DIR)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=discover_tool_hidden_imports(),
     hookspath=[],

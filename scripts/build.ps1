@@ -13,6 +13,7 @@ $DistAppDir = Join-Path $DistDir "Tools"
 $InstallerDir = Join-Path $DistDir "installer"
 $SpecPath = Join-Path $RepoRoot "packaging\pyinstaller\Tools.spec"
 $InnoScriptPath = Join-Path $RepoRoot "packaging\inno\Tools.iss"
+$RequirementsPath = Join-Path $RepoRoot "requirements.txt"
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $Python = if (Test-Path $VenvPython) { $VenvPython } else { "python" }
 
@@ -31,6 +32,58 @@ function Assert-InRepoPath {
 
 function Get-AppVersion {
     & $Python -c "from app.metadata import APP_VERSION; print(APP_VERSION)"
+}
+
+function Test-RequiredPythonModules {
+    $dependencyProbe = @'
+import importlib
+
+required_modules = {
+    "certifi": "certifi",
+    "PIL": "Pillow",
+    "PySide6": "PySide6",
+    "pypdf": "pypdf",
+    "fitz": "PyMuPDF",
+    "PyInstaller": "pyinstaller",
+}
+
+missing = []
+for module_name, package_name in required_modules.items():
+    try:
+        importlib.import_module(module_name)
+    except Exception:
+        missing.append(f"{package_name} (import {module_name})")
+
+if missing:
+    missing_text = ", ".join(missing)
+    raise SystemExit(
+        "Missing required build dependencies for the selected Python interpreter: "
+        f"{missing_text}. Run 'python -m pip install -r requirements.txt' and try again."
+    )
+'@
+
+    $null = $dependencyProbe | & $Python - 2>$null
+    return $LASTEXITCODE -eq 0
+}
+
+function Ensure-RequiredPythonModules {
+    if (Test-RequiredPythonModules) {
+        return
+    }
+
+    if (-not (Test-Path $RequirementsPath)) {
+        throw "requirements.txt was not found: $RequirementsPath"
+    }
+
+    Write-Warning "Required Python build dependencies are missing for $Python. Installing from requirements.txt..."
+    & $Python -m pip install -r $RequirementsPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not install build dependencies with $Python -m pip install -r requirements.txt"
+    }
+
+    if (-not (Test-RequiredPythonModules)) {
+        throw "Python dependency verification failed for build interpreter even after installing requirements: $Python"
+    }
 }
 
 function Assert-BundledFFmpeg {
@@ -129,6 +182,8 @@ Set-Location $RepoRoot
 
 $Version = Get-AppVersion
 Write-Host "Building Tools v$Version"
+Ensure-RequiredPythonModules
+Write-Host "Required Python build dependencies verified"
 Assert-BundledFFmpeg
 Write-Host "Bundled FFmpeg files found in assets\ffmpeg"
 

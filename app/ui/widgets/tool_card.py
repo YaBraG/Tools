@@ -63,7 +63,6 @@ class ToolCard(QFrame):
     @staticmethod
     def _format_tags(manifest: ToolManifest) -> str:
         if not manifest.tags:
-            return f"v{manifest.version}"
+            return manifest.category.lower()
 
-        return f"v{manifest.version} | " + ", ".join(manifest.tags)
-
+        return ", ".join(manifest.tags)
